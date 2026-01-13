@@ -19,9 +19,8 @@ from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, reca
 # precision_score: 精确率，预测为正的样本中实际为正的比例
 # recall_score: 召回率，实际为正的样本中被正确预测为正的比例
 
-from tqdm import tqdm
-
 # ====== 可视化 ======
+from tqdm import tqdm
 import matplotlib.pyplot as plt     # 绘图库，用于数据分布、结果曲线等可视化
 # 设置字体为SimHei以支持中文
 plt.rcParams['font.sans-serif'] = ['SimHei'] # 黑体
@@ -38,14 +37,12 @@ class ImprovedLSTM(nn.Module):
             hidden_size=128,
             num_layers=2,
             batch_first=True,
-            dropout=0.3 if 2 > 1 else 0,
+            dropout=0.3,
             bidirectional=False
         )
-        # 双向LSTM的因子
-        lstm_factor = 2
-        self.bn1 = nn.BatchNorm1d(128 * lstm_factor)     # 批归一化
+        self.bn1 = nn.BatchNorm1d(128)     # 批归一化
         # 全连接层
-        self.fc1 = nn.Linear(128 * lstm_factor, 64)
+        self.fc1 = nn.Linear(128, 64)
         self.bn2 = nn.BatchNorm1d(64)
         # Dropout
         self.dropout = nn.Dropout(0.3)
@@ -89,9 +86,13 @@ class ImprovedLSTM(nn.Module):
 class RNNModel(Model):
     def __init__(self):
         super().__init__()
+        self.pt_path = 'output/model/best_lstm.pt'
+        self.model_path = 'output/model/rnn_model.pth'
+        self.fig_hist_path = 'output/img/rnn_training_history.png'
+        self.fig_conf_path = 'output/img/rnn_confusion_matrix.png'
+        self.fig_opti_path = 'output/img/rnn_threshold_optimization.png'
 
     def _plot_metrics(self, hist):
-        """修复的绘图函数 - 确保所有需要的键都存在"""
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
         axes = axes.flatten()
 
@@ -148,7 +149,7 @@ class RNNModel(Model):
                 axes[i].remove()
         
         plt.tight_layout()
-        plt.savefig('output/img/rnn_training_history.png', dpi=150)
+        plt.savefig(self.fig_hist_path, dpi=150)
         plt.close(fig)
 
     def fit(self, X_train, y_train, X_valid, y_valid, epochs=50):
@@ -168,7 +169,7 @@ class RNNModel(Model):
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='max', factor=0.5, patience=7//2)
-        early_stop = EarlyStopping(patience=7, verbose=verbose, save_path='output/model/best_lstm.pt')
+        early_stop = EarlyStopping(patience=7, verbose=verbose, save_path=self.pt_path)
 
         # 初始化历史记录
         history = {'train_loss': [], 'val_loss': [],
@@ -240,7 +241,7 @@ class RNNModel(Model):
                 break
 
         # 5. 训练结束后加载最优权重
-        self.model.load_state_dict(torch.load('output/model/best_lstm.pt', map_location=self.device))
+        self.model.load_state_dict(torch.load(self.pt_path, map_location=self.device))
         if verbose:
             print('Loaded best model.')
 
@@ -248,7 +249,7 @@ class RNNModel(Model):
             print('Loaded best model.')
         
         # 新增：训练结束后自动保存完整模型
-        self.save('output/model/rnn_model.pth')
+        self.save()
         if verbose:
             print('Saved full model to output/model/rnn_model.pth')
 
@@ -318,12 +319,13 @@ class RNNModel(Model):
             print(f'真实标签: {int(y_true)}  |  预测概率: {prob:.4f}  |  预测类别: {pred_label}')
         return prob, pred_label
 
-    def save(self, filepath='output/model/rnn_model.pth'):
+    def save(self):
         """
         保存完整模型
         Args:
             filepath: 保存路径
         """
+        filepath = self.model_path
         # 确保目录存在
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         
@@ -336,12 +338,13 @@ class RNNModel(Model):
         torch.save(save_dict, filepath)
         print(f'Model saved to {filepath}')
     
-    def load(self, filepath='output/model/rnn_model.pth'):
+    def load(self):
         """
         加载完整模型
         Args:
             filepath: 模型文件路径
         """
+        filepath = self.model_path
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Model file not found: {filepath}")
         
@@ -392,7 +395,7 @@ class RNNModel(Model):
         ax.set_ylabel('真实标签')
         plt.tight_layout()
         # plt.show()
-        plt.savefig('output/img/rnn_confusion_matrix.png', dpi=150)
+        plt.savefig(self.fig_conf_path, dpi=150)
         plt.close()
 
     def optimize_threshold(self, X_valid, y_valid, step=0.01):
@@ -460,7 +463,7 @@ class RNNModel(Model):
         
         # 保存图像
         os.makedirs('output/img', exist_ok=True)
-        plt.savefig('output/img/rnn_threshold_optimization.png', dpi=150, bbox_inches='tight')
+        plt.savefig(self.fig_opti_path, dpi=150, bbox_inches='tight')
         # plt.show()
         plt.close()
         
