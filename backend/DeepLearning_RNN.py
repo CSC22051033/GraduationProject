@@ -1,6 +1,6 @@
 # ====== 数据预处理 ======
 from carClaims import split     # 数据集划分 - 分割原始数据集为训练集、验证集和测试集
-from carClaims import Model, EarlyStopping
+from carClaims import BaseModel, EarlyStopping
 
 # ====== 文件操作 ======
 import os     # 提供文件路径操作功能，用于创建目录和文件管理
@@ -83,7 +83,7 @@ class ImprovedLSTM(nn.Module):
         output = self.fc2(last_hidden)
         return output
 
-class RNNModel(Model):
+class RNNModel(BaseModel):
     def __init__(self):
         super().__init__()
         self.pt_path = 'output/model/best_lstm.pt'

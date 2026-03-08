@@ -2,34 +2,33 @@
 import os               # 操作系统接口：文件/目录操作、环境变量读取等
 import numpy as np      # 数值计算核心库，提供高效多维数组及矩阵运算
 import pandas as pd     # 表格型数据处理利器，DataFrame 是其核心数据结构
-
 # ====== 通用工具 ======
 from collections import Counter     # 快速统计可迭代对象中各元素出现次数（常用于查看类别分布）
-
 # ====== 样本不平衡处理 ======
 from imblearn.over_sampling import SMOTE                    # 合成少数类过采样：凭空生成少数类样本，减缓类别失衡
 from imblearn.under_sampling import RandomUnderSampler      # 随机多数类欠采样：随机删减多数类样本
-
 # ====== 特征缩放 ======
 from sklearn.preprocessing import MinMaxScaler      # 最小-最大归一化：把数值特征压缩到 [0, 1] 区间
-
+from sklearn.preprocessing import StandardScaler
 # ====== 数据集划分 ======
 from sklearn.model_selection import train_test_split
-
 # ====== 特征选择 ======
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score, classification_report
-
 # ====== PyTorch深度学习框架 ======
 import torch                      # PyTorch深度学习框架，提供张量计算和自动求导功能
 import torch.nn as nn             # PyTorch神经网络模块，提供网络层、损失函数等
 from torch.utils.data import TensorDataset, DataLoader    # 数据集封装和数据加载工具
-
 # ====== 可视化 ======
 import matplotlib.pyplot as plt     # 绘图库，用于数据分布、结果曲线等可视化
 # 设置字体为SimHei以支持中文
 plt.rcParams['font.sans-serif'] = ['SimHei'] # 黑体
 plt.rcParams['axes.unicode_minus'] = False # 正常显示负号
+
+from keras.models import Model
+from keras.layers import Input, Conv1D, MaxPooling1D, Flatten, Dense, Dropout
+from keras.optimizers import Adam
+from sklearn.utils import class_weight
 
 class CarClaimsPreprocessor:
     """
@@ -503,121 +502,187 @@ class CarClaimsPreprocessor:
         return self.df
 
 class FeatureSelect:
-    """该类实现特征选择"""
-    def __init__(self, df):
-        self.df = df
-        self.save_path = 'output/'
-    
-    def select(self):
-        # 读数据 ------------------------------------------------------------
-        df = self.df
+    """特征选择"""
+    def __init__(self, save_path='output/'):
+        self.save_path = save_path
+        os.makedirs(self.save_path, exist_ok=True)
+        os.makedirs(os.path.join(self.save_path, 'img'), exist_ok=True)
 
-        # 划分 X, y ---------------------------------------------------------
-        target = 'FraudFound'
-        X = df.drop(columns=[target])
-        y = df[target]
+        # 保存训练过程中产生的对象
+        self.scaler = None          # 用于 CNN 的标准化器
+        self.cnn_feature_extractor = None  # CNN 特征提取子模型
+        self.rf = None               # 随机森林模型
+        self.feature_importances_ = None  # 特征重要性
+        self.top_features_ = None     # 选出的特征名（可选）
 
-        # 训练集 / 测试集 ---------------------------------------------------
-        X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.3, stratify=y, random_state=42)
+    def fit(self, X_train, y_train,
+            use_cnn=True, cnn_output_dim=64, cnn_epochs=20, cnn_batch_size=32,
+            rf_n_estimators=300, rf_max_depth=None):
+        """
+        在训练集上拟合特征选择器
+        """
+        self.use_cnn = use_cnn
+        self.cnn_output_dim = cnn_output_dim if use_cnn else 0
 
-        # 随机森林拟合 -------------------------------------------------------
-        rf = RandomForestClassifier(
-            n_estimators=300,
-            max_depth=None,
-            class_weight='balanced',   # 处理不平衡
+        # 如果需要 CNN，则训练并提取深度特征（仅对训练集）
+        if use_cnn:
+            # 1. 标准化
+            self.scaler = StandardScaler()
+            X_train_scaled = self.scaler.fit_transform(X_train)
+
+            # 2. 训练 CNN 并提取特征提取器
+            self.cnn_feature_extractor = self._train_cnn(
+                X_train_scaled, y_train,
+                output_dim=cnn_output_dim,
+                epochs=cnn_epochs,
+                batch_size=cnn_batch_size
+            )
+
+            # 3. 对训练集提取深度特征
+            X_train_cnn = self._extract_cnn_features(X_train_scaled)
+            # 将深度特征转换为 DataFrame（列名统一）
+            df_cnn = pd.DataFrame(X_train_cnn,
+                                   columns=[f'deep_feat_{i+1}' for i in range(cnn_output_dim)])
+            # 拼接原始特征和深度特征
+            X_train_processed = pd.concat([X_train.reset_index(drop=True), df_cnn], axis=1)
+        else:
+            X_train_processed = X_train.copy()
+
+        # 训练随机森林
+        self.rf = RandomForestClassifier(
+            n_estimators=rf_n_estimators,
+            max_depth=rf_max_depth,
+            class_weight='balanced',
             random_state=42,
             n_jobs=-1
         )
-        rf.fit(X_train, y_train)
+        self.rf.fit(X_train_processed, y_train)
 
-        # 评估 --------------------------------------------------------------
-        print('ROC-AUC:', roc_auc_score(y_test, rf.predict_proba(X_test)[:, 1]))
-        print(classification_report(y_test, rf.predict(X_test)))
+        # 保存特征重要性
+        self.feature_importances_ = pd.Series(
+            self.rf.feature_importances_,
+            index=X_train_processed.columns
+        ).sort_values(ascending=False)
 
-        # 特征重要性 Top-N ---------------------------------------------------
-        top_n = 30
-        importances = pd.Series(rf.feature_importances_, index=X.columns) \
-                    .sort_values(ascending=False)
+        return self
 
-        print('Top 特征：')
-        print(importances.head(top_n))
+    def transform(self, X):
+        """
+        对任意数据集 X 应用同样的变换（标准化 + 深度特征提取 + 保持列一致）
+        """
+        if self.use_cnn:
+            # 1. 标准化（使用训练集的 scaler）
+            X_scaled = self.scaler.transform(X)
 
-        # 画图 --------------------------------------------------------------
-        self.plot_importance(importances, top_n, (6, 6))
+            # 2. 提取深度特征
+            X_cnn = self._extract_cnn_features(X_scaled)
+            df_cnn = pd.DataFrame(X_cnn,
+                                   columns=[f'deep_feat_{i+1}' for i in range(self.cnn_output_dim)])
 
-        return importances.head(top_n)
+            # 3. 拼接
+            X_processed = pd.concat([X.reset_index(drop=True), df_cnn], axis=1)
+        else:
+            X_processed = X.copy()
 
-    def plot_importance(self, importances: pd.Series, top_n: int = 30, figsize: tuple = (6, 5)) -> None:
-            """绘制并保存特征重要性条形图"""
-            plt.figure(figsize=figsize)
-            importances.head(top_n).plot(kind='barh')
-            plt.gca().invert_yaxis()
-            plt.title('RandomForest Feature Importance（车险欺诈）')
-            plt.tight_layout()
+        # 确保列顺序与训练时一致（可选）
+        # X_processed = X_processed[self.feature_importances_.index]  # 若需要按重要性排序
+        return X_processed
 
-            # 保存
-            save_path = self.save_path + 'img/feature_importances'
-            if save_path:
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                plt.savefig(save_path, dpi=300, bbox_inches='tight')
-                print(f'特征重要性图已保存至 {save_path}')
+    def fit_transform(self, X_train, y_train, **kwargs):
+        """方便直接调用 fit + transform on training set"""
+        self.fit(X_train, y_train, **kwargs)
+        return self.transform(X_train)
 
-            plt.close()
+    def _train_cnn(self, X_train_scaled, y_train, output_dim, epochs, batch_size):
+        """训练 CNN 并返回特征提取器（子模型）"""
+        n_features = X_train_scaled.shape[1]
+        X_train_reshaped = X_train_scaled.reshape(-1, n_features, 1)
 
-def split_train_val_test(df: pd.DataFrame, target: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    数据集划分:训练集train（60%）、验证集valid（20%）、测试集test（20%）
-        df: 经过预处理的DataFrame数据
-        target: 目标列，用于分层抽样
-    """
+        # 构建模型（与原来类似）
+        inputs = Input(shape=(n_features, 1))
+        x = Conv1D(filters=64, kernel_size=3, activation='relu', padding='same')(inputs)
+        x = MaxPooling1D(pool_size=2)(x)
+        x = Conv1D(filters=128, kernel_size=3, activation='relu', padding='same')(x)
+        x = MaxPooling1D(pool_size=2)(x)
+        x = Flatten()(x)
+        dense_layer = Dense(output_dim, activation='relu', name='deep_features')(x)
+        x = Dropout(0.5)(dense_layer)
+        outputs = Dense(1, activation='sigmoid')(x)
 
-    # 1. 先把 train+valid 一起抽出来，占 80 %
-    train_val, test = train_test_split(
-        df,
-        test_size=0.2,
-        stratify=df[target],   # 分层字段
-        random_state=42
-    )
+        model = Model(inputs=inputs, outputs=outputs)
+        model.compile(optimizer=Adam(0.001), loss='binary_crossentropy', metrics=['accuracy'])
 
-    # 2. 再把 train 和 valid 分开：train 占剩余中的 0.75（即整体 0.6），valid 占 0.25（即整体 0.2）
-    train, valid = train_test_split(
-        train_val,
-        test_size=0.25,          # 0.25 × 0.8 = 0.2
-        stratify=train_val[target],
-        random_state=42
-    )
+        # 处理类别权重
+        class_weights = class_weight.compute_class_weight(
+            'balanced', classes=np.unique(y_train), y=y_train
+        )
+        class_weight_dict = {0: class_weights[0], 1: class_weights[1]}
 
-    print(f'train: {len(train)}  ({len(train)/len(df):.1%})')
-    print(f'valid:   {len(valid)}    ({len(valid)/len(df):.1%})')
-    print(f'test:  {len(test)}   ({len(test)/len(df):.1%})')
+        model.fit(X_train_reshaped, y_train,
+                  epochs=epochs, batch_size=batch_size,
+                  class_weight=class_weight_dict,
+                  verbose=0)
 
-    return train, valid, test
+        # 返回特征提取器
+        feature_extractor = Model(inputs=model.input, outputs=model.get_layer('deep_features').output)
+        return feature_extractor
 
-def split_x_y(df: pd.DataFrame, target: str) -> tuple[pd.DataFrame, pd.Series]:
-    """把 DataFrame 拆成特征矩阵 X 与标签 y"""
-    X = df.drop(columns=target)
-    y = df[target]
-    return X, y
+    def _extract_cnn_features(self, X_scaled):
+        """使用已训练的特征提取器提取深度特征"""
+        n_features = X_scaled.shape[1]
+        X_reshaped = X_scaled.reshape(-1, n_features, 1)
+        return self.cnn_feature_extractor.predict(X_reshaped, verbose=0)
+
+    def plot_importance(self, top_n=30):
+        """绘制特征重要性（与原来类似）"""
+        plt.figure(figsize=(6, 5))
+        self.feature_importances_.head(top_n).sort_values().plot(kind='barh')
+        plt.xlabel('Importance')
+        plt.title('RandomForest Feature Importance (含深度特征)')
+        plt.tight_layout()
+        img_path = os.path.join(self.save_path, 'img', 'feature_importances.png')
+        plt.savefig(img_path, dpi=300, bbox_inches='tight')
+        plt.close()
 
 def split(file_path, target):
-    # ====== 数据预处理 ======
+    # ====== 1. 数据预处理 ======
     preprocessor = CarClaimsPreprocessor(file_path)
-    df = preprocessor.processor()
+    df = preprocessor.processor()   # 得到包含目标列的完整数据框
 
-    # ====== 特征筛选 ======
-    top_feat = FeatureSelect(df).select()
-    selected_cols = top_feat.head(30).index.tolist()
-    selected_cols.append(target)
-    selected_df = df[selected_cols]
+    # ====== 2. 划分数据集（先划分，再特征工程） ======
+    # 先分出特征 X 和目标 y
+    X = df.drop(columns=[target])
+    y = df[target]
 
-    # ====== 数据集划分 ======
-    train, valid, test = split_train_val_test(selected_df, target)
-    X_train, y_train = split_x_y(train, target)
-    X_valid, y_valid = split_x_y(valid, target)
-    X_test, y_test = split_x_y(test, target)
+    # 划分训练、验证、测试集（例如 60% 训练，20% 验证，20% 测试）
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        X, y, test_size=0.4, stratify=y, random_state=42
+    )
+    X_valid, X_test, y_valid, y_test = train_test_split(
+        X_temp, y_temp, test_size=0.5, stratify=y_temp, random_state=42
+    )
 
-    return X_train, y_train, X_valid, y_valid, X_test, y_test
+    # ====== 3. 特征选择（仅基于训练集拟合） ======
+    fs = FeatureSelect(save_path='output/')
+    # 在训练集上拟合特征选择器（包括 CNN 特征提取和随机森林）
+    fs.fit(X_train, y_train,
+           use_cnn=True,                # 根据需要开启
+           cnn_output_dim=64,
+           cnn_epochs=20,
+           cnn_batch_size=32,
+           rf_n_estimators=300)
+
+    # 可视化特征重要性（可选）
+    fs.plot_importance(top_n=30)
+
+    # ====== 4. 转换所有数据集（应用同样的变换） ======
+    X_train_trans = fs.transform(X_train)
+    X_valid_trans = fs.transform(X_valid)
+    X_test_trans  = fs.transform(X_test)
+
+    # 此时 X_train_trans, X_valid_trans, X_test_trans 已经包含了深度特征（如果启用）
+
+    return X_train_trans, y_train, X_valid_trans, y_valid, X_test_trans, y_test
 
 # ========== 早停工具类 ==========
 class EarlyStopping:
@@ -653,7 +718,7 @@ class EarlyStopping:
                     print('EarlyStopping: Triggered!')
         return self.early_stop
 
-class Model:
+class BaseModel:
     def __init__(self):
         self.model  = None
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
