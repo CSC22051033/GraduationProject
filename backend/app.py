@@ -581,18 +581,16 @@ def cnn_predict():
         
         cnn_model = CNNModel()
         try:
-            cnn_model.load_model('output/model/cnn_trained.pth')
+            cnn_model.load()
         except:
             return jsonify({
                 'error': '模型未训练，请先训练模型',
                 'status': 'failed'
             }), 400
         
-        best_threshold = cnn_model.optimize_threshold(X_valid, y_valid)
-
-        prob, pred = cnn_model.predict_one(
+        prob, pred = cnn_model.predict(
             x_single=X_test.iloc[k],
-            best_threshold=best_threshold
+            best_threshold=0.5
         )
 
         prediction = {

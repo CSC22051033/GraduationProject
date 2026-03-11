@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 # ====== 特征选择 ======
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, classification_report
+from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
 # ====== PyTorch深度学习框架 ======
 import torch                      # PyTorch深度学习框架，提供张量计算和自动求导功能
 import torch.nn as nn             # PyTorch神经网络模块，提供网络层、损失函数等
@@ -718,13 +718,21 @@ class EarlyStopping:
                     print('EarlyStopping: Triggered!')
         return self.early_stop
 
+# ========== 基类 BaseModel ==========
 class BaseModel:
     def __init__(self):
-        self.model  = None
+        self.model = None
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.n_features = None  # 记录输入特征维度
-        self.pos_weight = 1.0
+        self.n_features = None
+        self.pos_weight = torch.tensor(1.0).to(self.device)
         self.criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(1.0))
+        # 路径属性（子类可覆盖）
+        self.pt_path = 'output/model/best_model.pt'
+        self.model_path = 'output/model/model.pth'
+        self.fig_hist_path = 'output/img/training_history.png'
+        self.fig_conf_path = 'output/img/confusion_matrix.png'
+        self.fig_opti_path = 'output/img/threshold_optimization.png'
+        self.model_class = None   # 子类必须指定模型类
 
     @staticmethod
     def calc_pos_weight(y):
@@ -732,29 +740,225 @@ class BaseModel:
         y = np.asarray(y).squeeze()
         pos = y.sum()
         neg = len(y) - pos
-        return torch.tensor(neg / max(pos, 1))   # 避免除 0
-    
-    def df_to_loader(self, X, y=None, shuffle=True):
-        """
-            将特征矩阵 X（及可选标签 y）打包成 PyTorch 的 DataLoader，供后续训练或预测使用。
-        """
+        return torch.tensor(neg / max(pos, 1))
 
-        # ---- 1. 统一把 X 转成 numpy ----
+    def df_to_loader(self, X, y=None, shuffle=True, batch_size=32):
+        """将特征矩阵 X（及可选标签 y）打包成 DataLoader"""
         if hasattr(X, 'values'):          # pandas 对象
             X = X.values
         X_tensor = torch.tensor(X.astype(np.float32))
-
-        # ---- 2. 处理 y ----
-        if y is None:                     # 预测时可以不传 y
-            y_tensor = torch.zeros(len(X_tensor))  # 占位，后面不会用
+        if y is None:
+            y_tensor = torch.zeros(len(X_tensor))
         else:
-            if hasattr(y, 'values'):      # pandas 对象
+            if hasattr(y, 'values'):
                 y = y.values
             y = y.squeeze() if y.ndim > 1 else y
             y_tensor = torch.tensor(y.astype(np.float32)).unsqueeze(1)
-
-        # ---- 3. 组装成 DataLoader ----
         dataset = TensorDataset(X_tensor, y_tensor)
-        loader  = DataLoader(dataset, batch_size=32, shuffle=shuffle, num_workers=0)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
         return loader
-    
+
+    def _evaluate(self, data_loader):
+        """评估模型在 data_loader 上的性能，返回 (loss, auc, acc, precision, recall)"""
+        self.model.eval()
+        total_loss = 0.0
+        preds = []
+        labels = []
+        with torch.no_grad():
+            for xb, yb in data_loader:
+                xb, yb = xb.to(self.device), yb.to(self.device)
+                out = self.model(xb)
+                loss = self.criterion(out, yb)
+                total_loss += loss.item() * xb.size(0)
+                preds.append(torch.sigmoid(out).cpu().numpy())
+                labels.append(yb.cpu().numpy())
+        total_loss /= len(data_loader.dataset)
+        preds_np = np.concatenate(preds)
+        labels_np = np.concatenate(labels)
+        if len(np.unique(labels_np)) > 1:
+            auc = roc_auc_score(labels_np, preds_np)
+            preds_binary = (preds_np > 0.5).astype(int)
+            acc = accuracy_score(labels_np, preds_binary)
+            precision = precision_score(labels_np, preds_binary, zero_division=0)
+            recall = recall_score(labels_np, preds_binary, zero_division=0)
+        else:
+            auc = 0.5
+            acc = precision = recall = 0.0
+        return total_loss, auc, acc, precision, recall
+
+    def predict(self, x_single, y_true=None, best_threshold=0.5):
+        """单条样本预测，返回 (概率, 类别)"""
+        if hasattr(x_single, 'values'):
+            x_single = x_single.values
+        x_single = np.asarray(x_single, dtype=np.float32).squeeze()
+        if x_single.ndim != 1:
+            raise ValueError('x_single 必须是 1 维向量')
+        X = x_single.reshape(1, -1)
+        loader = self.df_to_loader(X, shuffle=False)
+        self.model.eval()
+        with torch.no_grad():
+            for xb, _ in loader:
+                xb = xb.to(self.device)
+                logit = self.model(xb)
+                prob = torch.sigmoid(logit).cpu().item()
+        pred_label = int(prob > best_threshold)
+        if y_true is not None:
+            print(f'真实标签: {int(y_true)}  |  预测概率: {prob:.4f}  |  预测类别: {pred_label}')
+        return prob, pred_label
+
+    def optimize_threshold(self, X_valid, y_valid, step=0.01):
+        """使用验证集优化阈值（基于F1），绘制曲线并返回最佳阈值"""
+        self.model.eval()
+        valid_loader = self.df_to_loader(X_valid, y_valid, shuffle=False)
+        y_true_list, y_score_list = [], []
+        with torch.no_grad():
+            for xb, yb in valid_loader:
+                xb, yb = xb.to(self.device), yb.to(self.device)
+                logits = self.model(xb)
+                probs = torch.sigmoid(logits).cpu().numpy()
+                y_score_list.append(probs)
+                y_true_list.append(yb.cpu().numpy())
+        y_true = np.concatenate(y_true_list).flatten()
+        y_scores = np.concatenate(y_score_list).flatten()
+
+        thresholds = np.arange(0, 1 + step, step)
+        f1_scores = []
+        for th in thresholds:
+            y_pred = (y_scores > th).astype(int)
+            f1_scores.append(f1_score(y_true, y_pred, zero_division=0))
+
+        best_idx = np.argmax(f1_scores)
+        best_th = thresholds[best_idx]
+        best_f1 = f1_scores[best_idx]
+
+        # 绘制曲线
+        plt.figure(figsize=(6, 6))
+        plt.plot(thresholds, f1_scores, 'b-', linewidth=2, label='F1 Score')
+        plt.axvline(x=best_th, color='red', linestyle='--', label=f'最佳阈值: {best_th:.3f}')
+        plt.plot(best_th, best_f1, 'ro', markersize=10)
+        plt.xlabel('阈值')
+        plt.ylabel('F1分数')
+        plt.title(f'阈值优化结果 (最佳阈值: {best_th:.3f}, F1: {best_f1:.4f})')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        os.makedirs(os.path.dirname(self.fig_opti_path), exist_ok=True)
+        plt.savefig(self.fig_opti_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        print("\n阈值优化结果:")
+        print("-" * 60)
+        print(f"最佳阈值: {best_th:.4f}")
+        print(f"最佳F1分数: {best_f1:.4f}")
+        print("-" * 60)
+
+        key_thresholds = [0.3, 0.4, 0.5, 0.6, 0.7]
+        print("\n不同阈值下的F1分数:")
+        for th in key_thresholds:
+            idx = int(th / step)
+            if idx < len(f1_scores):
+                print(f"  阈值 {th:.1f}: F1 = {f1_scores[idx]:.4f}")
+        return best_th
+
+    def _plot_confusion_matrix_minimal(self, X_test, y_test, best_threshold):
+        """绘制混淆矩阵（最多2500条样本）"""
+        from sklearn.metrics import confusion_matrix
+        y_pred = []
+        for i in range(min(2500, len(X_test))):
+            _, pred = self.predict(X_test.iloc[i], best_threshold=best_threshold)
+            y_pred.append(pred)
+        y_true = y_test.iloc[:len(y_pred)]
+
+        cm = confusion_matrix(y_true, y_pred)
+        fig, ax = plt.subplots(figsize=(6, 6))
+        im = ax.imshow(cm, cmap='Blues')
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                ax.text(j, i, str(cm[i, j]),
+                        ha='center', va='center',
+                        color='white' if cm[i, j] > cm.max()/2 else 'black')
+        ax.set_xlabel('预测标签')
+        ax.set_ylabel('真实标签')
+        plt.tight_layout()
+        os.makedirs(os.path.dirname(self.fig_conf_path), exist_ok=True)
+        plt.savefig(self.fig_conf_path, dpi=150)
+        plt.close()
+
+    def _plot_metrics(self, history):
+        """绘制训练曲线（损失、准确率、精确率、召回率）"""
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        axes = axes.flatten()
+        metrics = [
+            ('训练和验证损失', 'train_loss', 'val_loss'),
+            ('训练和验证准确率', 'train_acc', 'val_acc'),
+            ('训练和验证精确率', 'train_pre', 'val_pre'),
+            ('训练和验证召回率', 'train_rec', 'val_rec')
+        ]
+        label_map = {'train': '训练', 'val': '验证'}
+        plot_count = 0
+        for ax, (title, tr_key, val_key) in zip(axes, metrics):
+            if tr_key in history and len(history[tr_key]) > 0 and val_key in history and len(history[val_key]) > 0:
+                ax.plot(history[tr_key], label=label_map['train'], linewidth=2, marker='o', markersize=4)
+                ax.plot(history[val_key], label=label_map['val'], linewidth=2, marker='o', markersize=4)
+                ax.set_title(title, fontsize=14, fontweight='bold')
+                ax.set_xlabel('Epoch')
+                if 'loss' in tr_key:
+                    ax.set_ylabel('Loss')
+                elif 'acc' in tr_key:
+                    ax.set_ylabel('Accuracy')
+                elif 'pre' in tr_key:
+                    ax.set_ylabel('Precision')
+                elif 'rec' in tr_key:
+                    ax.set_ylabel('Recall')
+                ax.legend()
+                ax.grid(alpha=0.3)
+                plot_count += 1
+            else:
+                ax.remove()
+        if plot_count == 0:
+            plt.close(fig)
+            print("警告: 没有可绘制的训练指标数据")
+            return
+        for i in range(plot_count, len(axes)):
+            axes[i].remove()
+        plt.tight_layout()
+        os.makedirs(os.path.dirname(self.fig_hist_path), exist_ok=True)
+        plt.savefig(self.fig_hist_path, dpi=150)
+        plt.close(fig)
+
+    def save(self, filepath=None):
+        """保存模型检查点（包含状态字典、特征维度、正类权重）"""
+        if filepath is None:
+            filepath = self.model_path
+        if self.model is None:
+            raise ValueError("模型未训练，无法保存")
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        checkpoint = {
+            'model_state_dict': self.model.state_dict(),
+            'n_features': self.n_features,
+            'pos_weight': self.pos_weight.cpu() if torch.is_tensor(self.pos_weight) else torch.tensor(self.pos_weight),
+        }
+        torch.save(checkpoint, filepath)
+        print(f"模型已保存到: {filepath}")
+
+    def load(self, filepath=None):
+        """加载模型"""
+        if filepath is None:
+            filepath = self.model_path
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"模型文件不存在: {filepath}")
+        checkpoint = torch.load(filepath, map_location=self.device)
+        self.n_features = checkpoint['n_features']
+        if self.model_class is None:
+            raise ValueError("子类必须设置 model_class 属性")
+        self.model = self.model_class(self.n_features).to(self.device)
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+
+        pos_weight = checkpoint.get('pos_weight', 1.0)
+        if not isinstance(pos_weight, torch.Tensor):
+            pos_weight = torch.tensor(pos_weight, device=self.device)
+        else:
+            pos_weight = pos_weight.to(self.device)
+        self.pos_weight = pos_weight
+        self.criterion = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight)
+        print(f"模型已从 {filepath} 加载")
+        return self
