@@ -1,20 +1,7 @@
 import torch
 import torch.nn as nn
 
-# ====== 文件操作 ======
-import os     # 提供文件路径操作功能，用于创建目录和文件管理
-
-# ====== 模型评估指标 ======
-from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score   # 分类模型评估指标
-
-# ====== 数据处理相关库 ======
-import numpy as np      # 数值计算核心库，提供高效多维数组及矩阵运算
-
-# ====== 可视化 ======
-from tqdm import tqdm
-
 from carClaims import split     # 数据集划分 - 分割原始数据集为训练集、验证集和测试集
-from carClaims import EarlyStopping
 from DeepLearning_RNN import RNNModel
 
 class CNN_LSTM(nn.Module):

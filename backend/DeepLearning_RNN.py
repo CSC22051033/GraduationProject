@@ -1,9 +1,4 @@
-# ====== 数据预处理 ======
-from carClaims import split     # 数据集划分 - 分割原始数据集为训练集、验证集和测试集
 from carClaims import BaseModel, EarlyStopping
-
-# ====== 文件操作 ======
-import os     # 提供文件路径操作功能，用于创建目录和文件管理
 
 # ====== PyTorch深度学习框架 ======
 import torch                    # PyTorch深度学习框架，提供张量计算和自动求导功能
@@ -72,8 +67,8 @@ class RNNModel(BaseModel):
 
         self.model = self.model_class(self.n_features).to(self.device)
         optimizer = optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=0)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=7//2)
-        early_stop = EarlyStopping(patience=7, verbose=True, save_path=self.pt_path)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10//2)
+        early_stop = EarlyStopping(patience=10, verbose=True, save_path=self.pt_path)
 
         history = {'train_loss': [], 'val_loss': [],
                    'train_auc': [], 'val_auc': [],
@@ -137,16 +132,4 @@ class RNNModel(BaseModel):
         self.save()
         self._plot_metrics(history)
         return history
-
-if __name__ == '__main__':  
-    X_train, y_train, X_valid, y_valid, X_test, y_test = split('carclaims.csv', 'FraudFound')
-    model = RNNModel()
-    # model.fit(X_train, y_train, X_valid, y_valid, epochs=50)
-    model.load()
-    best_threshold = model.optimize_threshold(X_valid, y_valid)
-    for i in range(10):
-        model.predict(X_test.iloc[i], y_test.iloc[i])
-    model._plot_confusion_matrix_minimal(X_test, y_test, best_threshold)
-
-
     

@@ -680,7 +680,7 @@ def split(file_path, target):
     X_valid_trans = fs.transform(X_valid)
     X_test_trans  = fs.transform(X_test)
 
-    # 此时 X_train_trans, X_valid_trans, X_test_trans 已经包含了深度特征（如果启用）
+    # 此时 X_train_trans, X_valid_trans, X_test_trans 已经包含了深度特征
 
     return X_train_trans, y_train, X_valid_trans, y_valid, X_test_trans, y_test
 
@@ -693,7 +693,7 @@ class EarlyStopping:
         verbose (bool): 是否打印早停信息
         save_path (str): 最优模型保存路径
     """
-    def __init__(self, patience=7, verbose=True, save_path=None):
+    def __init__(self, patience=10, verbose=True, save_path=None):
         self.patience = patience
         self.verbose  = verbose
         self.save_path = save_path
@@ -805,59 +805,6 @@ class BaseModel:
         if y_true is not None:
             print(f'真实标签: {int(y_true)}  |  预测概率: {prob:.4f}  |  预测类别: {pred_label}')
         return prob, pred_label
-
-    def optimize_threshold(self, X_valid, y_valid, step=0.01):
-        """使用验证集优化阈值（基于F1），绘制曲线并返回最佳阈值"""
-        self.model.eval()
-        valid_loader = self.df_to_loader(X_valid, y_valid, shuffle=False)
-        y_true_list, y_score_list = [], []
-        with torch.no_grad():
-            for xb, yb in valid_loader:
-                xb, yb = xb.to(self.device), yb.to(self.device)
-                logits = self.model(xb)
-                probs = torch.sigmoid(logits).cpu().numpy()
-                y_score_list.append(probs)
-                y_true_list.append(yb.cpu().numpy())
-        y_true = np.concatenate(y_true_list).flatten()
-        y_scores = np.concatenate(y_score_list).flatten()
-
-        thresholds = np.arange(0, 1 + step, step)
-        f1_scores = []
-        for th in thresholds:
-            y_pred = (y_scores > th).astype(int)
-            f1_scores.append(f1_score(y_true, y_pred, zero_division=0))
-
-        best_idx = np.argmax(f1_scores)
-        best_th = thresholds[best_idx]
-        best_f1 = f1_scores[best_idx]
-
-        # 绘制曲线
-        plt.figure(figsize=(6, 6))
-        plt.plot(thresholds, f1_scores, 'b-', linewidth=2, label='F1 Score')
-        plt.axvline(x=best_th, color='red', linestyle='--', label=f'最佳阈值: {best_th:.3f}')
-        plt.plot(best_th, best_f1, 'ro', markersize=10)
-        plt.xlabel('阈值')
-        plt.ylabel('F1分数')
-        plt.title(f'阈值优化结果 (最佳阈值: {best_th:.3f}, F1: {best_f1:.4f})')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        os.makedirs(os.path.dirname(self.fig_opti_path), exist_ok=True)
-        plt.savefig(self.fig_opti_path, dpi=150, bbox_inches='tight')
-        plt.close()
-
-        print("\n阈值优化结果:")
-        print("-" * 60)
-        print(f"最佳阈值: {best_th:.4f}")
-        print(f"最佳F1分数: {best_f1:.4f}")
-        print("-" * 60)
-
-        key_thresholds = [0.3, 0.4, 0.5, 0.6, 0.7]
-        print("\n不同阈值下的F1分数:")
-        for th in key_thresholds:
-            idx = int(th / step)
-            if idx < len(f1_scores):
-                print(f"  阈值 {th:.1f}: F1 = {f1_scores[idx]:.4f}")
-        return best_th
 
     def _plot_confusion_matrix_minimal(self, X_test, y_test, best_threshold):
         """绘制混淆矩阵（最多2500条样本）"""
