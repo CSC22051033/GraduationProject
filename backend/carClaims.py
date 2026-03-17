@@ -27,7 +27,7 @@ plt.rcParams['axes.unicode_minus'] = False # 正常显示负号
 
 from keras.models import Model
 from keras.layers import Input, Conv1D, MaxPooling1D, Flatten, Dense, Dropout
-from keras.optimizers import Adam
+from keras.optimizers import Adam   # 优化器
 from sklearn.utils import class_weight
 
 class CarClaimsPreprocessor:
