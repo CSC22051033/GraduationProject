@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt     # 绘图库，用于数据分布、结果曲
 plt.rcParams['font.sans-serif'] = ['SimHei'] # 黑体
 plt.rcParams['axes.unicode_minus'] = False # 正常显示负号
 
+import csv
 from keras.models import Model
 from keras.layers import Input, Conv1D, MaxPooling1D, Flatten, Dense, Dropout
 from keras.optimizers import Adam   # 优化器
@@ -644,7 +645,7 @@ class FeatureSelect:
         plt.savefig(img_path, dpi=300, bbox_inches='tight')
         plt.close()
 
-def split(file_path, target):
+def split(file_path, target, use_cnn=True):
     # ====== 1. 数据预处理 ======
     preprocessor = CarClaimsPreprocessor(file_path)
     df = preprocessor.processor()   # 得到包含目标列的完整数据框
@@ -666,7 +667,7 @@ def split(file_path, target):
     fs = FeatureSelect(save_path='output/')
     # 在训练集上拟合特征选择器（包括 CNN 特征提取和随机森林）
     fs.fit(X_train, y_train,
-           use_cnn=True,                # 根据需要开启
+           use_cnn=use_cnn,                # 根据需要开启
            cnn_output_dim=64,
            cnn_epochs=20,
            cnn_batch_size=32,
@@ -679,8 +680,6 @@ def split(file_path, target):
     X_train_trans = fs.transform(X_train)
     X_valid_trans = fs.transform(X_valid)
     X_test_trans  = fs.transform(X_test)
-
-    # 此时 X_train_trans, X_valid_trans, X_test_trans 已经包含了深度特征
 
     return X_train_trans, y_train, X_valid_trans, y_valid, X_test_trans, y_test
 
@@ -731,7 +730,6 @@ class BaseModel:
         self.model_path = 'output/model/model.pth'
         self.fig_hist_path = 'output/img/training_history.png'
         self.fig_conf_path = 'output/img/confusion_matrix.png'
-        self.fig_opti_path = 'output/img/threshold_optimization.png'
         self.model_class = None   # 子类必须指定模型类
 
     @staticmethod
@@ -832,6 +830,31 @@ class BaseModel:
 
     def _plot_metrics(self, history):
         """绘制训练曲线（损失、准确率、精确率、召回率）"""
+        csv_path = os.path.splitext(self.fig_hist_path)[0] + '_metrics.csv'
+        if history:
+            # 获取所有键，确保数据长度一致
+            keys = [k for k in history.keys() if history[k] and len(history[k]) > 0]
+            if keys:
+                # 确定epoch数（取第一个非空列表的长度）
+                n_epochs = len(history[keys[0]])
+                # 准备表头和数据行
+                headers = keys
+                rows = []
+                for i in range(n_epochs):
+                    row = [history[key][i] if i < len(history[key]) else None for key in keys]
+                    rows.append(row)
+                # 写入CSV
+                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+                with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(headers)  # 写表头
+                    writer.writerows(rows)    # 写数据行
+                print(f"训练历史数据已保存至: {csv_path}")
+            else:
+                print("警告: 历史数据为空，未保存CSV")
+        else:
+            print("警告: 未提供历史数据，跳过CSV保存")
+
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
         axes = axes.flatten()
         metrics = [

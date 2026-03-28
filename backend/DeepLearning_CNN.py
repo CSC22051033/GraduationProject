@@ -33,7 +33,7 @@ class CNN1D(nn.Module):
         self.conv2 = nn.Conv1d(32, 64, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(64)
         self.fc1 = nn.Linear(64, 64)
-        self.dp = nn.Dropout(0.3)
+        self.dp = nn.Dropout(0.4)
         self.fc2 = nn.Linear(64, 1)
 
     def forward(self, x):
@@ -58,7 +58,6 @@ class CNNModel(BaseModel):
         self.model_path = 'output/model/cnn_trained.pth'
         self.fig_hist_path = 'output/img/cnn_training_history.png'
         self.fig_conf_path = 'output/img/cnn_confusion_matrix.png'
-        self.fig_opti_path = 'output/img/cnn_threshold_optimization.png'
 
     def fit(self, X_train, y_train, X_valid, y_valid, epochs=50, patience=10):
         os.makedirs('output/model', exist_ok=True)

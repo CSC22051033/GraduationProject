@@ -37,7 +37,6 @@ class ImprovedCNNLSTM(RNNModel):
         self.model_path = 'output/model/mix_model.pth'
         self.fig_hist_path = 'output/img/mix_training_history.png'
         self.fig_conf_path = 'output/img/mix_confusion_matrix.png'
-        self.fig_opti_path = 'output/img/mix_threshold_optimization.png'
         self.model_class = CNN_LSTM
         
 if __name__ == '__main__':  

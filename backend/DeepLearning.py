@@ -24,20 +24,21 @@ def evaluate_model(model, X, y, model_name):
         'f1': f1
     }
 
-if __name__ == '__main__':  
-    X_train, y_train, X_valid, y_valid, X_test, y_test = split('carclaims.csv', 'FraudFound')
-    print(X_train.head())
-
+def deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test,   # 数据
+                  res_file = 'output/res',      # 输出结果路径
+                  fit_flag = True,              # 是否进行模型训练
+                ):
     # 确保输出目录存在
     os.makedirs('output', exist_ok=True)
-    res_file = 'output/res'  # 结果文件路径
 
     cnn = CNNModel()
     rnn = RNNModel()
     mix = ImprovedCNNLSTM()
-    cnn.fit(X_train, y_train, X_valid, y_valid,50)
-    rnn.fit(X_train, y_train, X_valid, y_valid,50)
-    mix.fit(X_train, y_train, X_valid, y_valid,50)
+
+    if fit_flag:
+        cnn.fit(X_train, y_train, X_valid, y_valid,50)
+        rnn.fit(X_train, y_train, X_valid, y_valid,50)
+        mix.fit(X_train, y_train, X_valid, y_valid,50)
 
     # 定义模型列表（名称和实例）
     models = [
@@ -52,8 +53,10 @@ if __name__ == '__main__':
     for name, model in models:
         print(f"\n--- Evaluating {name} ---")
         model.load()  # 加载预训练模型
+        
+        model._plot_confusion_matrix_minimal(X_test, y_test, 0.5)
 
-        print("Sample predictions (first 10 test samples):")
+        print("预测（前10个数据）:\n")
         for i in range(10):
             model.predict(X_test.iloc[i], y_test.iloc[i])
 
@@ -69,3 +72,12 @@ if __name__ == '__main__':
             f.write(f"{res['model']},{res['accuracy']:.4f},{res['precision']:.4f},{res['recall']:.4f},{res['f1']:.4f}\n")
     
     print(f"\nEvaluation results saved to {res_file}")
+
+if __name__ == '__main__':  
+    X_train, y_train, X_valid, y_valid, X_test, y_test = split('carclaims.csv', 'FraudFound', True)
+    print(X_train.head())
+    # deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test)
+    
+    cnn = CNNModel()
+    cnn.fit(X_train, y_train, X_valid, y_valid,50)
+    cnn._plot_confusion_matrix_minimal(X_test, y_test, 0.5)

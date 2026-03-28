@@ -53,7 +53,6 @@ class RNNModel(BaseModel):
         self.model_path = 'output/model/rnn_model.pth'
         self.fig_hist_path = 'output/img/rnn_training_history.png'
         self.fig_conf_path = 'output/img/rnn_confusion_matrix.png'
-        self.fig_opti_path = 'output/img/rnn_threshold_optimization.png'
         self.model_class = ImprovedLSTM
 
     def fit(self, X_train, y_train, X_valid, y_valid, epochs=50):
