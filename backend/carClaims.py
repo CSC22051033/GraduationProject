@@ -2,14 +2,11 @@
 import os               # 操作系统接口：文件/目录操作、环境变量读取等
 import numpy as np      # 数值计算核心库，提供高效多维数组及矩阵运算
 import pandas as pd     # 表格型数据处理利器，DataFrame 是其核心数据结构
-# ====== 通用工具 ======
-from collections import Counter     # 快速统计可迭代对象中各元素出现次数（常用于查看类别分布）
 # ====== 样本不平衡处理 ======
 from imblearn.over_sampling import SMOTE                    # 合成少数类过采样：凭空生成少数类样本，减缓类别失衡
 from imblearn.under_sampling import RandomUnderSampler      # 随机多数类欠采样：随机删减多数类样本
 # ====== 特征缩放 ======
 from sklearn.preprocessing import MinMaxScaler      # 最小-最大归一化：把数值特征压缩到 [0, 1] 区间
-from sklearn.preprocessing import StandardScaler
 # ====== 数据集划分 ======
 from sklearn.model_selection import train_test_split
 # ====== 特征选择 ======
@@ -18,6 +15,7 @@ from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, reca
 # ====== PyTorch深度学习框架 ======
 import torch                      # PyTorch深度学习框架，提供张量计算和自动求导功能
 import torch.nn as nn             # PyTorch神经网络模块，提供网络层、损失函数等
+import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader    # 数据集封装和数据加载工具
 # ====== 可视化 ======
 import matplotlib.pyplot as plt     # 绘图库，用于数据分布、结果曲线等可视化
@@ -49,6 +47,8 @@ class CarClaimsPreprocessor:
         # 创建输出文件夹
         self.output_dir = 'output'
         os.makedirs(self.output_dir, exist_ok=True)
+
+        self.scaler = MinMaxScaler()
 
     def load_data(self):
         """加载CSV数据"""
@@ -264,72 +264,6 @@ class CarClaimsPreprocessor:
         
         return self.df
     
-    def balance_dataset(self, target_column, random_state=42, smoteRate=0.6, underRate=0.65):
-        """
-        平衡数据集，处理类别不平衡问题
-        
-        Args:
-            target_column: 目标变量列名
-            random_state: 随机种子
-            
-        Returns:
-            balanced_df: 平衡后的数据框
-        """
-        if self.df is None:
-            print("请先加载数据！")
-            return None
-        
-        if target_column not in self.df.columns:
-            print(f"目标列 '{target_column}' 不存在于数据中")
-            return None
-        
-        print("=" * 50)
-        print(f"使用 smote_under 方法平衡数据集")
-        print("=" * 50)
-        
-        # 分离特征和目标变量
-        X = self.df.drop(columns=[target_column])
-        y = self.df[target_column]
-
-        # 显示原始类别分布
-        original_dist = Counter(y)
-        print(f"原始数据类别分布: {dict(original_dist)}")
-        
-        # 计算不平衡比例
-        majority_class = max(original_dist, key=original_dist.get)
-        minority_class = min(original_dist, key=original_dist.get)
-        imbalance_ratio = original_dist[majority_class] / original_dist[minority_class]
-        print(f"不平衡比例: {imbalance_ratio:.2f}:1")
-
-        # SMOTE过采样 + 随机欠采样组合
-        # 先使用SMOTE过采样少数类
-        smote = SMOTE(random_state=random_state, sampling_strategy=smoteRate)  # sampling_strategy
-        X_resampled, y_resampled = smote.fit_resample(X, y)
-            
-        # 再使用随机欠采样多数类
-        under_sampler = RandomUnderSampler(random_state=random_state, sampling_strategy=underRate)  # sampling_strategy
-        X_resampled, y_resampled = under_sampler.fit_resample(X_resampled, y_resampled)
-        print("使用 SMOTE + RandomUnderSampler 组合方法进行平衡")
-
-         # 显示平衡后的类别分布
-        balanced_dist = Counter(y_resampled)
-        print(f"平衡后数据类别分布: {dict(balanced_dist)}")
-        
-        # 创建平衡后的数据框
-        balanced_df = pd.DataFrame(X_resampled, columns=X.columns)
-        balanced_df = balanced_df.copy()  # 创建副本以避免碎片化
-        balanced_df[target_column] = y_resampled
-        
-        # 可视化类别分布
-        self._plot_class_distribution(original_dist, balanced_dist)
-        
-        print(f"\n平衡完成！")
-        print(f"原始数据形状: {self.df.shape}")
-        print(f"平衡后数据形状: {balanced_df.shape}")
-        
-        self.df = balanced_df
-        return balanced_df
-    
     def _plot_class_distribution(self, original_dist, balanced_dist, method='smote_under'):
         """
         绘制类别分布对比图
@@ -364,14 +298,21 @@ class CarClaimsPreprocessor:
         将布尔类型列转换为数值类型
         
         Args:
-            exclude_columns: 要排除的列名列表，不进行转换
-            
+            exclude_columns: 要排除的列名（str）、列名列表或 None；不传则不排除
+        
         Returns:
             转换后的DataFrame
         """
         if self.df is None:
             print("请先加载数据！")
             return None
+        
+        if exclude_columns is None:
+            exclude_set = set()
+        elif isinstance(exclude_columns, str):
+            exclude_set = {exclude_columns}
+        else:
+            exclude_set = set(exclude_columns)
         
         print("=" * 50)
         print("布尔类型列转换为数值类型")
@@ -388,15 +329,15 @@ class CarClaimsPreprocessor:
         boolean_cols_to_process = all_boolean_cols.copy()
         
         # 排除指定的列
-        if exclude_columns:
+        if exclude_set:
             original_count = len(boolean_cols_to_process)
             boolean_cols_to_process = [
                 col for col in boolean_cols_to_process 
-                if col not in exclude_columns
+                if col not in exclude_set
             ]
             excluded_count = original_count - len(boolean_cols_to_process)
             if excluded_count > 0:
-                print(f"排除 {excluded_count} 个布尔列: {[col for col in exclude_columns if col in all_boolean_cols]}")
+                print(f"排除 {excluded_count} 个布尔列: {[c for c in sorted(exclude_set) if c in all_boolean_cols]}")
         
         if len(boolean_cols_to_process) == 0:
             print("没有需要转换的布尔列")
@@ -404,7 +345,7 @@ class CarClaimsPreprocessor:
             if all_boolean_cols:
                 print(f"\n数据集包含以下 {len(all_boolean_cols)} 个布尔列:")
                 for col in all_boolean_cols:
-                    status = "排除" if exclude_columns and col in exclude_columns else "保留"
+                    status = "排除" if col in exclude_set else "保留"
                     print(f"  - {col}: {status}")
             return self.df
         
@@ -418,8 +359,8 @@ class CarClaimsPreprocessor:
             print(f"  {i}. {col}: True={true_count}, False={false_count}, 缺失值={null_count}")
         
         # 显示被排除的布尔列（如果有）
-        if exclude_columns:
-            excluded_boolean_cols = [col for col in exclude_columns if col in all_boolean_cols]
+        if exclude_set:
+            excluded_boolean_cols = [col for col in sorted(exclude_set) if col in all_boolean_cols]
             if excluded_boolean_cols:
                 print(f"\n已排除以下 {len(excluded_boolean_cols)} 个布尔列:")
                 for col in excluded_boolean_cols:
@@ -475,12 +416,6 @@ class CarClaimsPreprocessor:
         
         return converted_df
 
-    def minmax(self):
-        """最小最大归一化"""
-        num_cols = self.df.select_dtypes(include='number', exclude='bool').columns.tolist()
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        self.df[num_cols] = scaler.fit_transform(self.df[num_cols])
-
     def processor(self):
         # 加载数据
         self.load_data()
@@ -494,14 +429,26 @@ class CarClaimsPreprocessor:
         self.remove_useless_features()
         # 数据编码
         self.one_hot_encoding()     # 独热编码
-        # 数据平衡
-        self.balance_dataset(target_column='FraudFound')
         # 数据替换（True/False -> 1/0）
-        self.convert_boolean_to_numeric(exclude_columns='FraudFound')
-        # 数据归一化
-        self.minmax()
+        self.convert_boolean_to_numeric(exclude_columns=['FraudFound'])
         return self.df
 
+    def min_max(self, X, flag):
+        scaler = self.scaler
+        if flag:
+            X_scaled = pd.DataFrame(
+                scaler.fit_transform(X),
+                columns=X.columns,
+                index=X.index
+            )
+        else:
+            X_scaled = pd.DataFrame(
+                scaler.transform(X),
+                columns=X.columns,
+                index=X.index
+            )
+        return X_scaled
+    
 class FeatureSelect:
     """特征选择"""
     def __init__(self, save_path='output/'):
@@ -510,14 +457,13 @@ class FeatureSelect:
         os.makedirs(os.path.join(self.save_path, 'img'), exist_ok=True)
 
         # 保存训练过程中产生的对象
-        self.scaler = None          # 用于 CNN 的标准化器
         self.cnn_feature_extractor = None  # CNN 特征提取子模型
         self.rf = None               # 随机森林模型
         self.feature_importances_ = None  # 特征重要性
         self.top_features_ = None     # 选出的特征名（可选）
 
     def fit(self, X_train, y_train,
-            use_cnn=True, cnn_output_dim=64, cnn_epochs=20, cnn_batch_size=32,
+            use_cnn=True, cnn_output_dim=32, cnn_epochs=5, cnn_batch_size=16,
             rf_n_estimators=300, rf_max_depth=None):
         """
         在训练集上拟合特征选择器
@@ -527,20 +473,16 @@ class FeatureSelect:
 
         # 如果需要 CNN，则训练并提取深度特征（仅对训练集）
         if use_cnn:
-            # 1. 标准化
-            self.scaler = StandardScaler()
-            X_train_scaled = self.scaler.fit_transform(X_train)
-
             # 2. 训练 CNN 并提取特征提取器
             self.cnn_feature_extractor = self._train_cnn(
-                X_train_scaled, y_train,
+                X_train, y_train,
                 output_dim=cnn_output_dim,
                 epochs=cnn_epochs,
                 batch_size=cnn_batch_size
             )
 
             # 3. 对训练集提取深度特征
-            X_train_cnn = self._extract_cnn_features(X_train_scaled)
+            X_train_cnn = self._extract_cnn_features(X_train)
             # 将深度特征转换为 DataFrame（列名统一）
             df_cnn = pd.DataFrame(X_train_cnn,
                                    columns=[f'deep_feat_{i+1}' for i in range(cnn_output_dim)])
@@ -564,6 +506,7 @@ class FeatureSelect:
             self.rf.feature_importances_,
             index=X_train_processed.columns
         ).sort_values(ascending=False)
+        self.feature_importances_.to_csv('output/feature_importances.csv', header=True)
 
         return self
 
@@ -572,11 +515,8 @@ class FeatureSelect:
         对任意数据集 X 应用同样的变换（标准化 + 深度特征提取 + 保持列一致）
         """
         if self.use_cnn:
-            # 1. 标准化（使用训练集的 scaler）
-            X_scaled = self.scaler.transform(X)
-
             # 2. 提取深度特征
-            X_cnn = self._extract_cnn_features(X_scaled)
+            X_cnn = self._extract_cnn_features(X)
             df_cnn = pd.DataFrame(X_cnn,
                                    columns=[f'deep_feat_{i+1}' for i in range(self.cnn_output_dim)])
 
@@ -596,6 +536,10 @@ class FeatureSelect:
 
     def _train_cnn(self, X_train_scaled, y_train, output_dim, epochs, batch_size):
         """训练 CNN 并返回特征提取器（子模型）"""
+            # 将 DataFrame 转换为 NumPy 数组
+        if isinstance(X_train_scaled, pd.DataFrame):
+            X_train_scaled = X_train_scaled.values
+        
         n_features = X_train_scaled.shape[1]
         X_train_reshaped = X_train_scaled.reshape(-1, n_features, 1)
 
@@ -630,12 +574,14 @@ class FeatureSelect:
 
     def _extract_cnn_features(self, X_scaled):
         """使用已训练的特征提取器提取深度特征"""
+        if isinstance(X_scaled, pd.DataFrame):
+            X_scaled = X_scaled.values
         n_features = X_scaled.shape[1]
         X_reshaped = X_scaled.reshape(-1, n_features, 1)
         return self.cnn_feature_extractor.predict(X_reshaped, verbose=0)
 
     def plot_importance(self, top_n=30):
-        """绘制特征重要性（与原来类似）"""
+        """绘制特征重要性"""
         plt.figure(figsize=(6, 5))
         self.feature_importances_.head(top_n).sort_values().plot(kind='barh')
         plt.xlabel('Importance')
@@ -645,7 +591,11 @@ class FeatureSelect:
         plt.savefig(img_path, dpi=300, bbox_inches='tight')
         plt.close()
 
-def split(file_path, target, use_cnn=True):
+def split(file_path, target, use_cnn=True, smote_strategy=0.75, under_strategy=0.75):
+    """
+    smote_strategy / under_strategy: imblearn 中 float 表示少数类样本数与多数类样本数之比
+    （重采样后的目标比例）。略提高可使训练集更接近平衡，利于在 pos_weight≈1 时仍学到少数类。
+    """
     # ====== 1. 数据预处理 ======
     preprocessor = CarClaimsPreprocessor(file_path)
     df = preprocessor.processor()   # 得到包含目标列的完整数据框
@@ -663,6 +613,20 @@ def split(file_path, target, use_cnn=True):
         X_temp, y_temp, test_size=0.5, stratify=y_temp, random_state=42
     )
 
+    # ====== 3. 在训练集上拟合归一化器 ======
+    X_train_scaled = preprocessor.min_max(X_train, True)
+    X_valid_scaled = preprocessor.min_max(X_valid, False)
+    X_test_scaled = preprocessor.min_max(X_test, False)
+
+    # ====== 4. 在训练集上做数据平衡 ======
+    smote = SMOTE(random_state=42, sampling_strategy=smote_strategy)
+    under = RandomUnderSampler(random_state=42, sampling_strategy=under_strategy)
+    X_train_bal, y_train_bal = smote.fit_resample(X_train_scaled, y_train)
+    X_train_bal, y_train_bal = under.fit_resample(X_train_bal, y_train_bal)
+    
+    X_train, y_train = X_train_bal, y_train_bal
+    X_valid, X_test = X_valid_scaled, X_test_scaled
+
     # ====== 3. 特征选择（仅基于训练集拟合） ======
     fs = FeatureSelect(save_path='output/')
     # 在训练集上拟合特征选择器（包括 CNN 特征提取和随机森林）
@@ -674,7 +638,7 @@ def split(file_path, target, use_cnn=True):
            rf_n_estimators=300)
 
     # 可视化特征重要性（可选）
-    fs.plot_importance(top_n=30)
+    fs.plot_importance(top_n=40)
 
     # ====== 4. 转换所有数据集（应用同样的变换） ======
     X_train_trans = fs.transform(X_train)
@@ -725,6 +689,7 @@ class BaseModel:
         self.n_features = None
         self.pos_weight = torch.tensor(1.0).to(self.device)
         self.criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(1.0))
+
         # 路径属性（子类可覆盖）
         self.pt_path = 'output/model/best_model.pt'
         self.model_path = 'output/model/model.pth'
@@ -804,14 +769,29 @@ class BaseModel:
             print(f'真实标签: {int(y_true)}  |  预测概率: {prob:.4f}  |  预测类别: {pred_label}')
         return prob, pred_label
 
-    def _plot_confusion_matrix_minimal(self, X_test, y_test, best_threshold):
+    def predict_labels(self, X, pred_threshold=0.5):
+        """批量预测类别（与单条 predict 的阈值逻辑一致）"""
+        if self.model is None:
+            raise ValueError('模型未加载')
+        loader = self.df_to_loader(X, y=None, shuffle=False)
+        self.model.eval()
+        chunks = []
+        with torch.no_grad():
+            for xb, _ in loader:
+                xb = xb.to(self.device)
+                logit = self.model(xb)
+                prob = torch.sigmoid(logit).cpu().numpy()
+                chunks.append(prob)
+        probs = np.concatenate(chunks).flatten()
+        return (probs > pred_threshold).astype(int)
+
+    def _plot_confusion_matrix_minimal(self, X_test, y_test, pred_threshold=0.5):
         """绘制混淆矩阵（最多2500条样本）"""
         from sklearn.metrics import confusion_matrix
-        y_pred = []
-        for i in range(min(2500, len(X_test))):
-            _, pred = self.predict(X_test.iloc[i], best_threshold=best_threshold)
-            y_pred.append(pred)
-        y_true = y_test.iloc[:len(y_pred)]
+        n = min(2500, len(X_test))
+        X_sub = X_test.iloc[:n]
+        y_pred = self.predict_labels(X_sub, pred_threshold=pred_threshold)
+        y_true = y_test.iloc[:n]
 
         cm = confusion_matrix(y_true, y_pred)
         fig, ax = plt.subplots(figsize=(6, 6))

@@ -32,26 +32,32 @@ class CNN1D(nn.Module):
         self.bn1 = nn.BatchNorm1d(32)
         self.conv2 = nn.Conv1d(32, 64, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(64)
-        self.fc1 = nn.Linear(64, 64)
-        self.dp = nn.Dropout(0.4)
+        self.pool_avg = nn.AdaptiveAvgPool1d(1)
+        self.pool_max = nn.AdaptiveMaxPool1d(1)
+        self.fc1 = nn.Linear(128, 64)  # 64 (avg) + 64 (max)
+        self.dp = nn.Dropout(0.5)
         self.fc2 = nn.Linear(64, 1)
 
     def forward(self, x):
         x = x.unsqueeze(1)                     # (B,1,F)
         x = torch.relu(self.bn1(self.conv1(x)))
         x = torch.relu(self.bn2(self.conv2(x)))
-        x = torch.max_pool1d(x, kernel_size=x.size(-1)).squeeze(-1)  # (B,64)
+        avg = self.pool_avg(x).squeeze(-1)     # (B,64)
+        maxp = self.pool_max(x).squeeze(-1)    # (B,64)
+        x = torch.cat([avg, maxp], dim=1)      # (B,128)
         x = torch.relu(self.fc1(x))
         x = self.dp(x)
         return self.fc2(x)
 
 class CNNModel(BaseModel):
-    def __init__(self, lr=1e-3, device=None, pos_weight=1.0):
+    def __init__(self, lr=1e-3, device=None, weight_decay=1e-4, pos_weight=None):
         super().__init__()
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.lr = lr
+        self.weight_decay = weight_decay
+        # None：在 fit 内按 y_train 计算 neg/pos（与 RNN 一致，与 SMOTE 后的训练分布一致）
+        # 传入数值则强制使用该 pos_weight（不做原始分布推算）
         self.pos_weight = pos_weight
-        self.criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight).to(self.device))
         self.model_class = CNN1D
         # 路径覆盖
         self.pt_path = 'output/model/best_cnn.pt'
@@ -59,18 +65,33 @@ class CNNModel(BaseModel):
         self.fig_hist_path = 'output/img/cnn_training_history.png'
         self.fig_conf_path = 'output/img/cnn_confusion_matrix.png'
 
-    def fit(self, X_train, y_train, X_valid, y_valid, epochs=50, patience=10):
+    def fit(self, X_train, y_train, X_valid, y_valid, epochs=50, patience=10,
+            lr_scheduler_factor=0.5, lr_scheduler_patience=3):
         os.makedirs('output/model', exist_ok=True)
         os.makedirs('output/img', exist_ok=True)
 
         self.n_features = X_train.shape[1]
         self.model = self.model_class(self.n_features).to(self.device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+        self.optimizer = optim.Adam(
+            self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
+        )
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode='max',
+            factor=lr_scheduler_factor,
+            patience=lr_scheduler_patience,
+        )
 
-        # 根据训练集重新计算 pos_weight
-        pos_weight_tensor = self.calc_pos_weight(y_train).to(self.device)
-        self.pos_weight = pos_weight_tensor     # 更新属性为 Tensor
-        self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
+        if self.pos_weight is None:
+            self.pos_weight = self.calc_pos_weight(y_train).to(self.device)
+        else:
+            pw = self.pos_weight
+            if not isinstance(pw, torch.Tensor):
+                pw = torch.tensor(float(pw), dtype=torch.float32, device=self.device)
+            else:
+                pw = pw.to(self.device)
+            self.pos_weight = pw
+        self.criterion = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight)
 
         train_loader = self.df_to_loader(X_train, y_train, shuffle=True)
         valid_loader = self.df_to_loader(X_valid, y_valid, shuffle=False)
@@ -124,6 +145,8 @@ class CNNModel(BaseModel):
                   f'train loss {train_loss:.4f} acc {train_acc:.4f} pre {train_pre:.4f} rec {train_rec:.4f} | '
                   f'val loss {val_loss:.4f} acc {val_acc:.4f} pre {val_pre:.4f} rec {val_rec:.4f} | '
                   f'val AUC {val_auc:.4f}')
+
+            scheduler.step(val_auc)
 
             if early_stopping(val_auc, self.model):
                 print(f'Early stopped at epoch {epoch}')

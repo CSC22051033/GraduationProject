@@ -12,7 +12,7 @@ class CNN_LSTM(nn.Module):
         self.conv2 = nn.Conv1d(32, 64, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(64)
         self.lstm = nn.LSTM(input_size=64, hidden_size=64, num_layers=2,
-                            batch_first=True, dropout=0.2)
+                            batch_first=True, dropout=0.4)
         self.fc = nn.Sequential(
             nn.Linear(64, 32),
             nn.ReLU(),
@@ -21,12 +21,12 @@ class CNN_LSTM(nn.Module):
         )
 
     def forward(self, x):
-        x = x.unsqueeze(1)                     # (B,1,F)
-        x = torch.relu(self.bn1(self.conv1(x)))
-        x = torch.relu(self.bn2(self.conv2(x)))   # (B,64,F)
-        x = x.transpose(1, 2)                    # (B,F,64)
-        out, (h_n, _) = self.lstm(x)             # h_n: (num_layers,B,64)
-        x = h_n[-1]                               # (B,64)
+        x = x.unsqueeze(1)                          # (B,1,F)
+        x = torch.relu(self.bn1(self.conv1(x)))     # (B,32,F)
+        x = torch.relu(self.bn2(self.conv2(x)))     # (B,64,F)
+        x = x.transpose(1, 2)                       # (B,F,64)
+        out, (h_n, _) = self.lstm(x)                # (B,F,64) -> LSTM
+        x = h_n[-1]                                 # 取最后层隐状态
         return self.fc(x)
 
 class ImprovedCNNLSTM(RNNModel):

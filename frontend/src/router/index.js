@@ -19,7 +19,6 @@ const routes = [
   },
   {
     path: '/dataset',
-    // 懒加载已足够，无需再声明 DatasetPage 变量
     component: () => import('@/views/Dataset.vue'),
     redirect: '/dataset/intro',
     children: [
@@ -38,6 +37,10 @@ const routes = [
       { path: 'rnn', component: VisualRNN },
     ]
   },
+  {
+    path: '/pFraud',
+    component: () => import('@/views/Result.vue'),
+  }
 ]
 
 const router = createRouter({

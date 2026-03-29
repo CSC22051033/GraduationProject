@@ -87,9 +87,9 @@ export default {
       try {
         // 并行加载所有数据
         await Promise.all([
-          // this.loadLatestFeatureImportanceImage(),
-          // this.loadLatestTrainingHistoryImage(),
-          this.loadLatestFeatureList()
+          this.loadLatestFeatureImportanceImage(),
+          this.loadLatestTrainingHistoryImage(),
+          // this.loadLatestFeatureList()
         ]);
       } catch (error) {
         console.error('加载文件失败:', error);

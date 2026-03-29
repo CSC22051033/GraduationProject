@@ -19,9 +19,6 @@ CORS(app, origins=['http://localhost:8080'], supports_credentials=True)
 preprocessor = None
 visualizer = None
 
-from carClaims import split 
-X_train, y_train, X_valid, y_valid, X_test, y_test = split('carclaims.csv', 'FraudFound')
-
 @app.route('/api/load_data', methods=['POST'])
 def load_data():
     """加载数据"""
@@ -299,7 +296,7 @@ def get_latest_feature_importance_image():
             return jsonify({"error": "图片目录不存在"}), 404
         
         # 查找所有特征重要性图片文件
-        pattern = os.path.join(img_dir, 'feature_importance_*.png')
+        pattern = os.path.join(img_dir, 'feature_importances.png')
         files = glob.glob(pattern)
         print(f"找到的特征重要性图片文件: {files}")
         
@@ -359,22 +356,6 @@ def get_latest_training_history_image():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"获取训练历史图片失败: {str(e)}"}), 500
-
-@app.route('/api/image/feature_importance/<filename>', methods=['GET'])
-def serve_feature_importance_image(filename):
-    """提供特征重要性图片文件"""
-    try:
-        file_path = os.path.join('output/img', filename)
-        print(f"尝试提供特征重要性图片: {file_path}")
-        
-        if not os.path.exists(file_path):
-            return jsonify({"error": "图片文件不存在"}), 404
-        
-        return send_file(file_path, mimetype='image/png')
-        
-    except Exception as e:
-        print(f"提供特征重要性图片失败: {str(e)}")
-        return jsonify({"error": f"提供图片失败: {str(e)}"}), 500
 
 @app.route('/api/image/training_history/<filename>', methods=['GET'])
 def serve_training_history_image(filename):
@@ -540,152 +521,6 @@ def get_balance_image():
         return send_file(image_path, mimetype='image/png')
     except Exception as e:
         return jsonify({'error': str(e)}), 404
-
-# CNN
-@app.route('/api/cnn_confusion_matrix')
-def get_cnn_confusion_matrix():
-    """获取CNN混淆矩阵图片"""
-    try:
-        image_path = os.path.join('..', 'output', 'img', 'cnn_confusion_matrix.png')
-        return send_file(image_path, mimetype='image/png')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
-
-@app.route('/api/cnn_threshold_optimization')
-def get_cnn_threshold_optimization():
-    """获取CNN阈值优化图片"""
-    try:
-        image_path = os.path.join('..', 'output', 'img', 'cnn_threshold_optimization.png')
-        return send_file(image_path, mimetype='image/png')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
-
-@app.route('/api/cnn_training_history')
-def get_cnn_training_history():
-    """获取CNN训练历史图片"""
-    try:
-        image_path = os.path.join('..', 'output', 'img', 'cnn_training_history.png')
-        return send_file(image_path, mimetype='image/png')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
-
-@app.route('/api/cnn_predict', methods=['POST'])
-def cnn_predict():
-    """CNN模型预测接口"""
-    try:
-        from DeepLearning_CNN import CNNModel
-
-        data = request.get_json()
-        # 获取前端传递的测试样本索引k，默认为0
-        k = data.get('k', 0) if data else 0
-        
-        cnn_model = CNNModel()
-        try:
-            cnn_model.load()
-        except:
-            return jsonify({
-                'error': '模型未训练，请先训练模型',
-                'status': 'failed'
-            }), 400
-        
-        prob, pred = cnn_model.predict(
-            x_single=X_test.iloc[k],
-            best_threshold=0.5
-        )
-
-        prediction = {
-            "fraud_probability": float(prob),
-            "prediction": "fraud" if pred == 1 else "non-fraud",
-            "true_value": int(y_test.iloc[k])
-        }
-
-        return jsonify({
-            'status': 'success',
-            'prediction': prediction
-        }), 200
-
-    except Exception as e:
-        print(f"CNN预测失败: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            "success": False,
-            "error": f"预测失败: {str(e)}"
-        }), 500
-
-# RNN
-@app.route('/api/rnn_confusion_matrix')
-def get_rnn_confusion_matrix():
-    """获取RNN混淆矩阵图片"""
-    try:
-        image_path = os.path.join('..', 'output', 'img', 'rnn_confusion_matrix.png')
-        return send_file(image_path, mimetype='image/png')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
-
-@app.route('/api/rnn_threshold_optimization')
-def get_rnn_threshold_optimization():
-    """获取RNN阈值优化图片"""
-    try:
-        image_path = os.path.join('..', 'output', 'img', 'rnn_threshold_optimization.png')
-        return send_file(image_path, mimetype='image/png')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
-
-@app.route('/api/rnn_training_history')
-def get_rnn_training_history():
-    """获取RNN训练历史图片"""
-    try:
-        image_path = os.path.join('..', 'output', 'img', 'rnn_training_history.png')
-        return send_file(image_path, mimetype='image/png')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
-    
-@app.route('/api/rnn_predict', methods=['POST'])
-def rnn_predict():
-    """RNN模型预测接口"""
-    try:
-        from DeepLearning_RNN import RNNModel
-
-        data = request.get_json()
-        # 获取前端传递的测试样本索引k，默认为0
-        k = data.get('k', 0) if data else 0
-        
-        rnn_model = RNNModel()
-        try:
-            rnn_model.load('output/model/rnn_model.pth')
-        except:
-            return jsonify({
-                'error': '模型未训练，请先训练模型',
-                'status': 'failed'
-            }), 400
-        
-        best_threshold = rnn_model.optimize_threshold(X_valid, y_valid)
-
-        prob, pred = rnn_model.predict(
-            x_single=X_test.iloc[k],
-            best_threshold=best_threshold
-        )
-
-        prediction = {
-            "fraud_probability": float(prob),
-            "prediction": "fraud" if pred == 1 else "non-fraud",
-            "true_value": int(y_test.iloc[k])
-        }
-
-        return jsonify({
-            'status': 'success',
-            'prediction': prediction
-        }), 200
-
-    except Exception as e:
-        print(f"RNN预测失败: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            "success": False,
-            "error": f"预测失败: {str(e)}"
-        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

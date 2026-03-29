@@ -22,30 +22,22 @@ import matplotlib.pyplot as plt     # 绘图库，用于数据分布、结果曲
 plt.rcParams['font.sans-serif'] = ['SimHei'] # 黑体
 plt.rcParams['axes.unicode_minus'] = False # 正常显示负号
 
-class ImprovedLSTM(nn.Module):
-    def __init__(self, n_features: int):
-        super(ImprovedLSTM, self).__init__()
-        self.n_features = n_features
-        self.lstm = nn.LSTM(input_size=n_features, hidden_size=128, num_layers=2,
-                             batch_first=True, dropout=0.3, bidirectional=False)
-        self.bn1 = nn.BatchNorm1d(128)
-        self.fc1 = nn.Linear(128, 64)
-        self.bn2 = nn.BatchNorm1d(64)
-        self.dropout = nn.Dropout(0.3)
-        self.fc2 = nn.Linear(64, 1)
-        self.relu = nn.ReLU()
+class LSTM(nn.Module):
+    def __init__(self, n_features):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size=n_features, hidden_size=32, num_layers=1,
+                            batch_first=True)
+        self.dropout = nn.Dropout(0.65)
+        self.fc = nn.Linear(32, 1)
 
     def forward(self, x):
         if x.dim() == 2:
-            x = x.unsqueeze(1)          # (B,1,F)
-        lstm_out, (hidden, cell) = self.lstm(x)
-        last_hidden = lstm_out[:, -1, :]   # (B,128)
-        last_hidden = self.bn1(last_hidden)
-        last_hidden = self.relu(self.fc1(last_hidden))
-        last_hidden = self.bn2(last_hidden)
-        last_hidden = self.dropout(last_hidden)
-        return self.fc2(last_hidden)
-
+            x = x.unsqueeze(1)
+        lstm_out, _ = self.lstm(x)
+        last = lstm_out[:, -1, :]
+        last = self.dropout(last)
+        return self.fc(last)
+    
 class RNNModel(BaseModel):
     def __init__(self):
         super().__init__()
@@ -53,7 +45,7 @@ class RNNModel(BaseModel):
         self.model_path = 'output/model/rnn_model.pth'
         self.fig_hist_path = 'output/img/rnn_training_history.png'
         self.fig_conf_path = 'output/img/rnn_confusion_matrix.png'
-        self.model_class = ImprovedLSTM
+        self.model_class = LSTM
 
     def fit(self, X_train, y_train, X_valid, y_valid, epochs=50):
         torch.manual_seed(42)
@@ -65,8 +57,8 @@ class RNNModel(BaseModel):
         valid_loader = self.df_to_loader(X_valid, y_valid, shuffle=False)
 
         self.model = self.model_class(self.n_features).to(self.device)
-        optimizer = optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=0)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=10//2)
+        optimizer = optim.Adam(self.model.parameters(), lr=1e-4, weight_decay=1e-3)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=3)
         early_stop = EarlyStopping(patience=10, verbose=True, save_path=self.pt_path)
 
         history = {'train_loss': [], 'val_loss': [],
@@ -86,6 +78,7 @@ class RNNModel(BaseModel):
                 loss = self.criterion(out, yb)
                 loss.backward()
                 optimizer.step()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 train_loss += loss.item() * xb.size(0)
                 train_preds.append(torch.sigmoid(out).detach().cpu().numpy())
                 train_labels.append(yb.cpu().numpy())
