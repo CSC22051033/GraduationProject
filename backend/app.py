@@ -687,5 +687,31 @@ def rnn_predict():
             "error": f"预测失败: {str(e)}"
         }), 500
 
+
+@app.route('/api/feature_importances_image', methods=['GET'])
+def get_feature_importances_image():
+    """直接获取 feature_importances.png 图片"""
+    try:
+        # 获取当前文件(app.py)所在目录的绝对路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # 从 backend 目录向上一级到 GraduationProject，再进入 output/img
+        image_path = os.path.join(current_dir, '..', 'output', 'img', 'feature_importances.png')
+        # 规范化路径（去除 .. 等）
+        image_path = os.path.normpath(image_path)
+        
+        print(f"尝试获取特征重要性图片: {image_path}")
+        
+        if not os.path.exists(image_path):
+            print(f"图片文件不存在: {image_path}")
+            return jsonify({"error": "图片文件不存在"}), 404
+        
+        return send_file(image_path, mimetype='image/png')
+        
+    except Exception as e:
+        print(f"获取特征重要性图片失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"获取图片失败: {str(e)}"}), 500
+    
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

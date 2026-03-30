@@ -10,47 +10,25 @@
     <!-- 错误信息 -->
     <div v-if="error" class="error-message">
       {{ error }}
+      <button @click="loadLatestFiles" class="retry-btn">重试</button>
     </div>
     
-    <!-- 第一行：图1和表1 -->
-    <div v-if="!loading && !error" class="row-first">
-      <!-- 图1：特征重要性图 -->
-      <div class="chart-section">
-        <h2>前20个最重要特征</h2>
-
+    <!-- 特征重要性图 -->
+    <div v-if="!loading && !error" class="chart-section">
+      <h2>前30个最重要特征</h2>
+      <div class="chart-info" v-if="fileInfo.featureImportanceTime">
+        生成时间: {{ fileInfo.featureImportanceTime }}
       </div>
-      
-      <!-- 表1：特征列表 -->
-      <div class="table-section">
-        <h2>筛选出的所有特征</h2>
-        <div class="table-info" v-if="fileInfo.featureListTime">
-          筛选时间: {{ fileInfo.featureListTime }} | 特征数量: {{ fileInfo.featureCount }}
-        </div>
-        <div class="table-container">
-          <table class="feature-table" v-if="features.length > 0">
-            <thead>
-              <tr>
-                <th>序号</th>
-                <th>特征</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(feature, index) in features" :key="index">
-                <td class="index-column">{{ index + 1 }}</td>
-                <td class="feature-column">{{ feature }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-else class="no-data">未找到特征列表</div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- 第二行：图2 -->
-    <div v-if="!loading && !error" class="row-second">
-      <div class="chart-section full-width">
-        <h2>训练历史</h2>
-        
+      <div class="chart-container">
+        <img 
+          v-if="featureImportanceImage"
+          :src="featureImportanceImage" 
+          alt="特征重要性图" 
+          class="chart-image"
+          @load="onImageLoad"
+          @error="onImageError"
+        />
+        <div v-else class="no-data">暂无特征重要性图片</div>
       </div>
     </div>
   </div>
@@ -64,16 +42,12 @@ export default {
   data() {
     return {
       featureImportanceImage: null,
-      trainingHistoryImage: null,
-      features: [],
       fileInfo: {
-        featureListTime: '',
-        featureCount: 0,
-        featureImportanceTime: '',
-        trainingHistoryTime: ''
+        featureImportanceTime: ''
       },
       loading: true,
-      error: null
+      error: null,
+      baseUrl: process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000'
     };
   },
   mounted() {
@@ -85,110 +59,48 @@ export default {
       this.error = null;
       
       try {
-        // 并行加载所有数据
-        await Promise.all([
-          // this.loadLatestFeatureImportanceImage(),
-          // this.loadLatestTrainingHistoryImage(),
-          this.loadLatestFeatureList()
-        ]);
+        await this.loadFeatureImportanceImage();
       } catch (error) {
-        console.error('加载文件失败:', error);
+        console.error('加载图片失败:', error);
         this.error = '加载数据失败，请检查后端服务是否正常运行';
       } finally {
         this.loading = false;
       }
     },
 
-    async loadLatestFeatureImportanceImage() {
+    async loadFeatureImportanceImage() {
       try {
-        // 首先尝试 base64 版本
-        const response = await axios.get('http://localhost:5000/api/latest-feature-importance-image-base64');
-        if (response.data && response.data.success && response.data.image) {
-          this.featureImportanceImage = response.data.image;
-          this.fileInfo.featureImportanceTime = this.formatTimestamp(response.data.timestamp);
-          console.log('特征重要性图片加载成功 (base64)');
-          return;
-        }
-      } catch (base64Error) {
-        console.warn('Base64 版本加载失败，尝试 URL 版本:', base64Error);
+        const response = await axios.get(`${this.baseUrl}/api/feature_importances_image`, {
+          responseType: 'blob'
+        });
         
-        // 如果 base64 失败，尝试 URL 版本
-        try {
-          const urlResponse = await axios.get('http://localhost:5000/api/latest-feature-importance-image');
-          if (urlResponse.data && urlResponse.data.success && urlResponse.data.url) {
-            // 构建完整的图片 URL
-            const fullImageUrl = `http://localhost:5000${urlResponse.data.url}`;
-            this.featureImportanceImage = fullImageUrl;
-            this.fileInfo.featureImportanceTime = this.formatTimestamp(urlResponse.data.timestamp);
-            console.log('特征重要性图片加载成功 (URL):', fullImageUrl);
-          }
-        } catch (urlError) {
-          console.error('URL 版本也加载失败:', urlError);
-          throw new Error('无法加载特征重要性图片');
-        }
-      }
-    },
-
-    async loadLatestTrainingHistoryImage() {
-      try {
-        // 首先尝试 base64 版本
-        const response = await axios.get('http://localhost:5000/api/latest-training-history-image-base64');
-        if (response.data && response.data.success && response.data.image) {
-          this.trainingHistoryImage = response.data.image;
-          this.fileInfo.trainingHistoryTime = this.formatTimestamp(response.data.timestamp);
-          console.log('训练历史图片加载成功 (base64)');
-          return;
-        }
-      } catch (base64Error) {
-        console.warn('Base64 版本加载失败，尝试 URL 版本:', base64Error);
-        
-        // 如果 base64 失败，尝试 URL 版本
-        try {
-          const urlResponse = await axios.get('http://localhost:5000/api/latest-training-history-image');
-          if (urlResponse.data && urlResponse.data.success && urlResponse.data.url) {
-            // 构建完整的图片 URL
-            const fullImageUrl = `http://localhost:5000${urlResponse.data.url}`;
-            this.trainingHistoryImage = fullImageUrl;
-            this.fileInfo.trainingHistoryTime = this.formatTimestamp(urlResponse.data.timestamp);
-            console.log('训练历史图片加载成功 (URL):', fullImageUrl);
-          }
-        } catch (urlError) {
-          console.error('URL 版本也加载失败:', urlError);
-          throw new Error('无法加载训练历史图片');
-        }
-      }
-    },
-
-    async loadLatestFeatureList() {
-      try {
-        const response = await axios.get('http://localhost:5000/api/latest-feature-list');
-        if (response.data && response.data.success) {
-          this.features = response.data.features || [];
-          this.fileInfo.featureListTime = response.data.time || '';
-          this.fileInfo.featureCount = response.data.count || 0;
-          console.log('特征列表加载成功，数量:', this.features.length);
+        if (response.status === 200) {
+          const blob = new Blob([response.data], { type: 'image/png' });
+          this.featureImportanceImage = URL.createObjectURL(blob);
+          this.fileInfo.featureImportanceTime = new Date().toLocaleString('zh-CN');
+          console.log('特征重要性图片加载成功');
         } else {
-          throw new Error(response.data?.error || '未知错误');
+          throw new Error('无法获取特征重要性图片');
         }
       } catch (error) {
-        console.error('加载特征列表失败:', error);
-        throw new Error('无法加载特征列表');
-      }
-    },
-
-    handleImageError(type) {
-      console.error(`${type} 图片加载失败`);
-      if (type === 'featureImportance') {
+        console.error('加载特征重要性图片失败:', error);
         this.featureImportanceImage = null;
-      } else if (type === 'trainingHistory') {
-        this.trainingHistoryImage = null;
       }
     },
 
-    formatTimestamp(timestamp) {
-      if (!timestamp) return '';
-      const date = new Date(timestamp * 1000);
-      return date.toLocaleString('zh-CN');
+    onImageLoad() {
+      console.log('特征重要性图片加载完成');
+    },
+
+    onImageError() {
+      console.error('特征重要性图片加载失败');
+      this.featureImportanceImage = null;
+    }
+  },
+  
+  beforeUnmount() {
+    if (this.featureImportanceImage && this.featureImportanceImage.startsWith('blob:')) {
+      URL.revokeObjectURL(this.featureImportanceImage);
     }
   }
 }
@@ -228,27 +140,32 @@ h2 {
   border-radius: 4px;
   margin-bottom: 20px;
   border-left: 4px solid #f44336;
+  text-align: center;
 }
 
-.row-first {
-  display: flex;
-  gap: 30px;
-  margin-bottom: 30px;
+.retry-btn {
+  margin-top: 15px;
+  padding: 8px 20px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
 }
 
-.chart-section, .table-section {
-  flex: 1;
+.retry-btn:hover {
+  background-color: #1976d2;
+}
+
+.chart-section {
   background: #fff;
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-.full-width {
-  flex: 1 1 100%;
-}
-
-.chart-info, .table-info {
+.chart-info {
   font-size: 12px;
   color: #888;
   margin-bottom: 10px;
@@ -257,6 +174,10 @@ h2 {
 
 .chart-container {
   text-align: center;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chart-image {
@@ -264,48 +185,7 @@ h2 {
   height: auto;
   border: 1px solid #ddd;
   border-radius: 4px;
-}
-
-.table-container {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.feature-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.feature-table th {
-  background: #f5f5f5;
-  padding: 12px 8px;
-  text-align: left;
-  font-weight: 600;
-  color: #333;
-  border-bottom: 2px solid #e0e0e0;
-  position: sticky;
-  top: 0;
-}
-
-.feature-table td {
-  padding: 10px 8px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.feature-table tr:hover {
-  background-color: #f8f9fa;
-}
-
-.index-column {
-  width: 60px;
-  text-align: center;
-  color: #666;
-  font-weight: 500;
-}
-
-.feature-column {
-  word-break: break-word;
+  display: block;
 }
 
 .no-data {
@@ -315,19 +195,15 @@ h2 {
   font-style: italic;
   background: #f9f9f9;
   border-radius: 4px;
+  width: 100%;
 }
 
-/* 响应式设计 */
 @media (max-width: 768px) {
-  .row-first {
-    flex-direction: column;
-  }
-  
   .feature-container {
     padding: 10px;
   }
   
-  .chart-section, .table-section {
+  .chart-section {
     padding: 15px;
   }
 }
