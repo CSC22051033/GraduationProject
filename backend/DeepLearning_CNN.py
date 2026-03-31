@@ -26,31 +26,41 @@ plt.rcParams['axes.unicode_minus'] = False # 正常显示负号
 from carClaims import BaseModel, EarlyStopping
 
 class CNN1D(nn.Module):
-    def __init__(self, n_features: int):
+    def __init__(self, n_features: int, dropout_rate=0.3, weight_decay=1e-3):
         super().__init__()
-        self.conv1 = nn.Conv1d(1, 32, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm1d(32)
-        self.conv2 = nn.Conv1d(32, 64, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm1d(64)
+        # 降低卷积核数量（原 32->64，改为 16->32）
+        self.conv1 = nn.Conv1d(1, 16, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm1d(16)
+        self.drop1 = nn.Dropout1d(dropout_rate)   # 卷积层后添加 Dropout1d
+        
+        self.conv2 = nn.Conv1d(16, 32, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm1d(32)
+        self.drop2 = nn.Dropout1d(dropout_rate)
+        
+        # 保留池化层
         self.pool_avg = nn.AdaptiveAvgPool1d(1)
         self.pool_max = nn.AdaptiveMaxPool1d(1)
-        self.fc1 = nn.Linear(128, 64)  # 64 (avg) + 64 (max)
-        self.dp = nn.Dropout(0.5)
-        self.fc2 = nn.Linear(64, 1)
+        
+        # 降低全连接层神经元数量（原 128->64->1，改为 64->32->1）
+        self.fc1 = nn.Linear(64, 32)   # 32 (avg) + 32 (max) = 64
+        self.dp = nn.Dropout(0.5)      # 全连接层 dropout 保持或略增
+        self.fc2 = nn.Linear(32, 1)
 
     def forward(self, x):
         x = x.unsqueeze(1)                     # (B,1,F)
         x = torch.relu(self.bn1(self.conv1(x)))
+        x = self.drop1(x)
         x = torch.relu(self.bn2(self.conv2(x)))
-        avg = self.pool_avg(x).squeeze(-1)     # (B,64)
-        maxp = self.pool_max(x).squeeze(-1)    # (B,64)
-        x = torch.cat([avg, maxp], dim=1)      # (B,128)
+        x = self.drop2(x)
+        avg = self.pool_avg(x).squeeze(-1)     # (B,32)
+        maxp = self.pool_max(x).squeeze(-1)    # (B,32)
+        x = torch.cat([avg, maxp], dim=1)      # (B,64)
         x = torch.relu(self.fc1(x))
         x = self.dp(x)
         return self.fc2(x)
 
 class CNNModel(BaseModel):
-    def __init__(self, lr=1e-3, device=None, weight_decay=1e-4, pos_weight=None):
+    def __init__(self, lr=5e-4, device=None, weight_decay=1e-2, pos_weight=None):
         super().__init__()
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.lr = lr

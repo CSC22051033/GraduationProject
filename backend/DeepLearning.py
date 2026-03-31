@@ -25,11 +25,12 @@ def deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test,   # 数据
                   res_file = 'output/res',      # 输出结果路径
                   fit_flag = True,              # 是否进行模型训练
                   pred_threshold = 0.5,         # 概率超过该值判为欺诈；略提高可提升精确率、降低召回
+                  pos_weight = None,
                 ):
     # 确保输出目录存在
     os.makedirs('output', exist_ok=True)
 
-    cnn = CNNModel()
+    cnn = CNNModel(pos_weight = pos_weight)
     # rnn = RNNModel()
     # mix = ImprovedCNNLSTM()
 
@@ -74,12 +75,13 @@ def deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test,   # 数据
     print(f"\nEvaluation results saved to {res_file}")
 
 if __name__ == '__main__':  
-    X_train, y_train, X_valid, y_valid, X_test, y_test = split('carclaims.csv', 'FraudFound', True)
+    X_train, y_train, X_valid, y_valid, X_test, y_test, pos_weight= split('carclaims.csv', 'FraudFound', True)
     print("训练集\n")
     print(X_train.head())
     print("验证集\n")
     print(X_valid.head())
     print("测试集\n")
     print(X_test.head())
-    deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test)
+
+    deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test, pos_weight = pos_weight)
     

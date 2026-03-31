@@ -591,7 +591,7 @@ class FeatureSelect:
         plt.savefig(img_path, dpi=300, bbox_inches='tight')
         plt.close()
 
-def split(file_path, target, use_cnn=True, smote_strategy=0.75, under_strategy=0.75):
+def split(file_path, target, use_cnn=True, smote_strategy=0.5, under_strategy=0.75):
     """
     smote_strategy / under_strategy: imblearn 中 float 表示少数类样本数与多数类样本数之比
     （重采样后的目标比例）。略提高可使训练集更接近平衡，利于在 pos_weight≈1 时仍学到少数类。
@@ -617,6 +617,8 @@ def split(file_path, target, use_cnn=True, smote_strategy=0.75, under_strategy=0
     X_train_scaled = preprocessor.min_max(X_train, True)
     X_valid_scaled = preprocessor.min_max(X_valid, False)
     X_test_scaled = preprocessor.min_max(X_test, False)
+
+    pos_weight = (len(y_train) - y_train.sum()) / y_train.sum()
 
     # ====== 4. 在训练集上做数据平衡 ======
     smote = SMOTE(random_state=42, sampling_strategy=smote_strategy)
@@ -645,7 +647,13 @@ def split(file_path, target, use_cnn=True, smote_strategy=0.75, under_strategy=0
     X_valid_trans = fs.transform(X_valid)
     X_test_trans  = fs.transform(X_test)
 
-    return X_train_trans, y_train, X_valid_trans, y_valid, X_test_trans, y_test
+    k = 40   # 可调节
+    top_features = fs.feature_importances_.head(k).index
+    X_train_trans = X_train_trans[top_features]
+    X_valid_trans = X_valid_trans[top_features]
+    X_test_trans  = X_test_trans[top_features]
+
+    return X_train_trans, y_train, X_valid_trans, y_valid, X_test_trans, y_test, pos_weight
 
 # ========== 早停工具类 ==========
 class EarlyStopping:
