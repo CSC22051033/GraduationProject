@@ -591,7 +591,7 @@ class FeatureSelect:
         plt.savefig(img_path, dpi=300, bbox_inches='tight')
         plt.close()
 
-def split(file_path, target, use_cnn=True, smote_strategy=0.5, under_strategy=0.75):
+def split(file_path, target, use_cnn=True, smote_strategy=0.2, under_strategy=0.75):
     """
     smote_strategy / under_strategy: imblearn 中 float 表示少数类样本数与多数类样本数之比
     （重采样后的目标比例）。略提高可使训练集更接近平衡，利于在 pos_weight≈1 时仍学到少数类。
@@ -621,10 +621,14 @@ def split(file_path, target, use_cnn=True, smote_strategy=0.5, under_strategy=0.
     pos_weight = (len(y_train) - y_train.sum()) / y_train.sum()
 
     # ====== 4. 在训练集上做数据平衡 ======
-    smote = SMOTE(random_state=42, sampling_strategy=smote_strategy)
+    """    smote = SMOTE(random_state=42, sampling_strategy=smote_strategy)
     under = RandomUnderSampler(random_state=42, sampling_strategy=under_strategy)
     X_train_bal, y_train_bal = smote.fit_resample(X_train_scaled, y_train)
-    X_train_bal, y_train_bal = under.fit_resample(X_train_bal, y_train_bal)
+    X_train_bal, y_train_bal = under.fit_resample(X_train_bal, y_train_bal)"""
+
+    from imblearn.combine import SMOTETomek
+    smt = SMOTETomek(sampling_strategy=0.2, random_state=42)
+    X_train_bal, y_train_bal = smt.fit_resample(X_train_scaled, y_train)
     
     X_train, y_train = X_train_bal, y_train_bal
     X_valid, X_test = X_valid_scaled, X_test_scaled
@@ -647,7 +651,7 @@ def split(file_path, target, use_cnn=True, smote_strategy=0.5, under_strategy=0.
     X_valid_trans = fs.transform(X_valid)
     X_test_trans  = fs.transform(X_test)
 
-    k = 40   # 可调节
+    k = 30   # 可调节
     top_features = fs.feature_importances_.head(k).index
     X_train_trans = X_train_trans[top_features]
     X_valid_trans = X_valid_trans[top_features]

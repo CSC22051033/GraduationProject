@@ -1,2 +1,2 @@
 model,accuracy,precision,recall,f1
-CNNModel,0.6732,0.1308,0.7935,0.2246
+CNNModel,0.7098,0.1398,0.7500,0.2357
