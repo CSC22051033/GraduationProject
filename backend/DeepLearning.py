@@ -75,9 +75,7 @@ def deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test,   # 数据
 
 if __name__ == '__main__':  
     X_train, y_train, X_valid, y_valid, X_test, y_test = split('carclaims.csv', 'FraudFound', True)
+    X_test.to_csv('output/X_test.csv', index=False)
+    y_test.to_csv('output/y_test.csv')
     print(X_train.head())
-    # deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test)
-    
-    cnn = CNNModel()
-    cnn.fit(X_train, y_train, X_valid, y_valid,50)
-    cnn._plot_confusion_matrix_minimal(X_test, y_test, 0.5)
+    deep_learning(X_train, y_train, X_valid, y_valid, X_test, y_test)

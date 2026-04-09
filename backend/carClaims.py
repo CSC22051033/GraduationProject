@@ -639,7 +639,7 @@ class FeatureSelect:
         plt.figure(figsize=(6, 5))
         self.feature_importances_.head(top_n).sort_values().plot(kind='barh')
         plt.xlabel('Importance')
-        plt.title('RandomForest Feature Importance (含深度特征)')
+        plt.title('RandomForest Feature Importance')
         plt.tight_layout()
         img_path = os.path.join(self.save_path, 'img', 'feature_importances.png')
         plt.savefig(img_path, dpi=300, bbox_inches='tight')

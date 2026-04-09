@@ -10,6 +10,8 @@ import DatasetFeature from '@/views/dataset/Feature.vue'
 
 import VisualCNN from '@/views/visual/CNN.vue'
 import VisualRNN from '@/views/visual/RNN.vue'
+import VisualMIX from '@/views/visual/MIX.vue'
+import PFraud from '@/views/PFraud.vue'
 
 const routes = [
   {
@@ -36,8 +38,14 @@ const routes = [
     children: [
       { path: 'cnn', component: VisualCNN },
       { path: 'rnn', component: VisualRNN },
+      { path: 'mix', component: VisualMIX },
     ]
   },
+  {
+    path: '/pFraud',
+    name: 'PFraud',
+    component: PFraud
+  }
 ]
 
 const router = createRouter({

@@ -1,12 +1,12 @@
 <template>
   <div class="card main-title">
-    <h1>CNN 卷积神经网络模型</h1>
-    <p class="subtitle">用于保险欺诈检测的深度学习模型</p>
+    <h1>混合深度学习模型</h1>
+    <p class="subtitle">CNN + RNN 混合模型用于保险欺诈检测</p>
 
     <!-- 加载状态 -->
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
-      <p>正在加载CNN模型结果...</p>
+      <p>正在加载混合模型结果...</p>
     </div>
 
     <!-- 错误信息 -->
@@ -16,18 +16,18 @@
 
     <!-- 模型结果展示 -->
     <div v-if="!loading && !error" class="cnn-results">
-      
+
       <!-- 第一行：训练历史图 -->
       <div class="row">
         <div class="image-card">
           <div class="image-header">
-            <h3>CNN训练历史</h3>
+            <h3>混合模型训练历史</h3>
             <p class="image-description">显示模型在训练过程中的准确率和损失变化</p>
           </div>
           <div class="image-container">
-            <img 
-              :src="trainingHistoryUrl" 
-              alt="CNN训练历史" 
+            <img
+              :src="trainingHistoryUrl"
+              alt="混合模型训练历史"
               class="cnn-image"
               @load="onTrainingHistoryLoad"
               @error="onTrainingHistoryError"
@@ -50,9 +50,9 @@
             <p class="image-description">展示模型在测试集上的分类性能</p>
           </div>
           <div class="image-container">
-            <img 
-              :src="confusionMatrixUrl" 
-              alt="CNN混淆矩阵" 
+            <img
+              :src="confusionMatrixUrl"
+              alt="混合模型混淆矩阵"
               class="cnn-image"
               @load="onConfusionMatrixLoad"
               @error="onConfusionMatrixError"
@@ -71,19 +71,19 @@
           <div class="info-list">
             <div class="info-item">
               <span class="info-label">模型类型:</span>
-              <span class="info-value">卷积神经网络 (CNN)</span>
+              <span class="info-value">混合深度学习 (CNN + RNN)</span>
             </div>
             <div class="info-item">
-              <span class="info-label">池化层:</span>
-              <span class="info-value">全局最大池化</span>
+              <span class="info-label">CNN 部分:</span>
+              <span class="info-value">2 层卷积 </span>
             </div>
             <div class="info-item">
-              <span class="info-label">卷积层:</span>
-              <span class="info-value">2 层 (32, 64 滤波器)</span>
+              <span class="info-label">RNN 部分:</span>
+              <span class="info-value">2 层 LSTM </span>
             </div>
             <div class="info-item">
               <span class="info-label">全连接层:</span>
-              <span class="info-value">2 层 (64, 1 神经元)</span>
+              <span class="info-value">2 层 </span>
             </div>
             <div class="info-item">
               <span class="info-label">输出层:</span>
@@ -91,7 +91,7 @@
             </div>
             <div class="info-item">
               <span class="info-label">保存位置:</span>
-              <span class="info-value">output/models/cnn_model.pth</span>
+              <span class="info-value">output/models/mix_model.pth</span>
             </div>
           </div>
         </div>
@@ -103,46 +103,46 @@
 
 <script>
 export default {
-  name: 'CNN',
+  name: 'MIX',
   data() {
     return {
       loading: true,
       error: null,
-      
+
       // 图片URL
-      confusionMatrixUrl: 'http://localhost:5000/api/cnn_confusion_matrix',
-      trainingHistoryUrl: 'http://localhost:5000/api/cnn_training_history',
-      
+      confusionMatrixUrl: 'http://localhost:5000/api/mix_confusion_matrix',
+      trainingHistoryUrl: 'http://localhost:5000/api/mix_training_history',
+
       // 图片加载状态
       confusionMatrixLoading: true,
       trainingHistoryLoading: true,
-      
+
       confusionMatrixError: false,
       trainingHistoryError: false
     };
   },
   mounted() {
-    this.loadCNNResults();
+    this.loadMIXResults();
   },
   methods: {
-    async loadCNNResults() {
+    async loadMIXResults() {
       this.loading = true;
       try {
         // 可以在这里添加其他数据加载逻辑
         // 比如加载模型评估指标等
-        
+
         // 设置一个最小加载时间，避免闪烁
         setTimeout(() => {
           this.loading = false;
         }, 500);
-        
+
       } catch (error) {
-        console.error('加载CNN结果失败:', error);
-        this.error = '加载CNN模型结果失败，请稍后重试';
+        console.error('加载混合模型结果失败:', error);
+        this.error = '加载混合模型结果失败，请稍后重试';
         this.loading = false;
       }
     },
-    
+
     // 图片加载成功处理
     onConfusionMatrixLoad() {
       this.confusionMatrixLoading = false;
@@ -150,7 +150,7 @@ export default {
     onTrainingHistoryLoad() {
       this.trainingHistoryLoading = false;
     },
-    
+
     // 图片加载错误处理
     onConfusionMatrixError() {
       this.confusionMatrixLoading = false;
@@ -331,12 +331,12 @@ export default {
   .half-width {
     flex: 0 0 100%;
   }
-  
+
   .info-label {
     min-width: 100px;
     font-size: 13px;
   }
-  
+
   .info-value {
     font-size: 13px;
   }

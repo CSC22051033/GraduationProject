@@ -5,6 +5,7 @@
     <nav class="menu">
       <router-link to="/visual/cnn" class="menu-item">CNN卷积神经网络</router-link>
       <router-link to="/visual/rnn" class="menu-item">LSTM循环神经网络</router-link>
+      <router-link to="/visual/mix" class="menu-item">混合深度学习模型</router-link>
     </nav>
   </aside>
 </template>

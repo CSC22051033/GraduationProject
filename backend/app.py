@@ -9,6 +9,7 @@ import base64
 import io
 import traceback
 import re
+import pandas as pd
 
 # 初始化Flask应用
 app = Flask(__name__)
@@ -18,9 +19,6 @@ CORS(app, origins=['http://localhost:8080'], supports_credentials=True)
 # 全局预处理器和可视化器实例
 preprocessor = None
 visualizer = None
-
-from carClaims import split 
-X_train, y_train, X_valid, y_valid, X_test, y_test = split('carclaims.csv', 'FraudFound')
 
 @app.route('/api/load_data', methods=['POST'])
 def load_data():
@@ -551,15 +549,6 @@ def get_cnn_confusion_matrix():
     except Exception as e:
         return jsonify({'error': str(e)}), 404
 
-@app.route('/api/cnn_threshold_optimization')
-def get_cnn_threshold_optimization():
-    """获取CNN阈值优化图片"""
-    try:
-        image_path = os.path.join('..', 'output', 'img', 'cnn_threshold_optimization.png')
-        return send_file(image_path, mimetype='image/png')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
-
 @app.route('/api/cnn_training_history')
 def get_cnn_training_history():
     """获取CNN训练历史图片"""
@@ -578,6 +567,10 @@ def cnn_predict():
         data = request.get_json()
         # 获取前端传递的测试样本索引k，默认为0
         k = data.get('k', 0) if data else 0
+        
+        # 加载测试数据
+        X_test = pd.read_csv('../output/X_test.csv')
+        y_test = pd.read_csv('../output/y_test.csv')['FraudFound'].map({'True': True, 'False': False})
         
         cnn_model = CNNModel()
         try:
@@ -623,15 +616,6 @@ def get_rnn_confusion_matrix():
     except Exception as e:
         return jsonify({'error': str(e)}), 404
 
-@app.route('/api/rnn_threshold_optimization')
-def get_rnn_threshold_optimization():
-    """获取RNN阈值优化图片"""
-    try:
-        image_path = os.path.join('..', 'output', 'img', 'rnn_threshold_optimization.png')
-        return send_file(image_path, mimetype='image/png')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
-
 @app.route('/api/rnn_training_history')
 def get_rnn_training_history():
     """获取RNN训练历史图片"""
@@ -651,6 +635,10 @@ def rnn_predict():
         # 获取前端传递的测试样本索引k，默认为0
         k = data.get('k', 0) if data else 0
         
+        # 加载测试数据
+        X_test = pd.read_csv('../output/X_test.csv')
+        y_test = pd.read_csv('../output/y_test.csv')['FraudFound'].map({'True': True, 'False': False})
+        
         rnn_model = RNNModel()
         try:
             rnn_model.load('output/model/rnn_model.pth')
@@ -660,7 +648,8 @@ def rnn_predict():
                 'status': 'failed'
             }), 400
         
-        best_threshold = rnn_model.optimize_threshold(X_valid, y_valid)
+        # 使用固定阈值0.5
+        best_threshold = 0.5
 
         prob, pred = rnn_model.predict(
             x_single=X_test.iloc[k],
@@ -687,6 +676,128 @@ def rnn_predict():
             "error": f"预测失败: {str(e)}"
         }), 500
 
+
+def _backend_root():
+    return os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+
+
+def _read_test_data(limit=100):
+    base_dir = _backend_root()
+    x_test_path = os.path.join(base_dir, 'output', 'X_test.csv')
+    y_test_path = os.path.join(base_dir, 'output', 'y_test.csv')
+
+    if not os.path.exists(x_test_path) or not os.path.exists(y_test_path):
+        raise FileNotFoundError('测试集文件不存在，请确认 output/X_test.csv 和 output/y_test.csv 是否存在')
+
+    X_test = pd.read_csv(x_test_path)
+    y_test = pd.read_csv(y_test_path)
+
+    if 'FraudFound' in y_test.columns:
+        y_series = y_test['FraudFound'].map({'True': 1, 'False': 0}).fillna(y_test['FraudFound'])
+    else:
+        y_series = y_test.iloc[:, 0]
+
+    y_series = y_series.astype(int)
+    X_test = X_test.iloc[:limit].reset_index(drop=True)
+    y_series = y_series.iloc[:len(X_test)].reset_index(drop=True)
+
+    return X_test, y_series
+
+
+@app.route('/api/load_test_data', methods=['GET'])
+def load_test_data_endpoint():
+    try:
+        X_test, y_test = _read_test_data(limit=100)
+        preview = X_test.copy()
+        preview['true_value'] = y_test
+        records = preview.to_dict(orient='records')
+        return jsonify({
+            'success': True,
+            'count': len(records),
+            'columns': list(preview.columns),
+            'records': records
+        })
+    except Exception as e:
+        print(f"加载测试集失败: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f"加载测试集失败: {str(e)}"
+        }), 500
+
+
+@app.route('/api/predict_model', methods=['POST'])
+def predict_model():
+    try:
+        data = request.get_json() or {}
+        model_name = str(data.get('model', 'cnn')).strip().lower()
+        limit = int(data.get('limit', 100))
+
+        X_test, y_test = _read_test_data(limit=limit)
+
+        if model_name == 'cnn':
+            from DeepLearning_CNN import CNNModel
+            model = CNNModel()
+        elif model_name == 'rnn':
+            from DeepLearning_RNN import RNNModel
+            model = RNNModel()
+        elif model_name == 'mix':
+            from DeepLearning_Mixed import ImprovedCNNLSTM
+            model = ImprovedCNNLSTM()
+        else:
+            return jsonify({'success': False, 'error': f'未知模型: {model_name}'}), 400
+
+        try:
+            model.load()
+        except Exception as load_err:
+            if hasattr(model, 'pt_path') and os.path.exists(model.pt_path):
+                model.load(model.pt_path)
+            else:
+                raise load_err
+
+        results = []
+        best_threshold = 0.5
+        for idx in range(len(X_test)):
+            prob, pred = model.predict(X_test.iloc[idx], best_threshold=best_threshold)
+            results.append({
+                'index': int(idx),
+                'fraud_probability': float(prob),
+                'prediction': 'fraud' if pred == 1 else 'non-fraud',
+                'true_value': int(y_test.iloc[idx])
+            })
+
+        return jsonify({
+            'success': True,
+            'model': model_name,
+            'count': len(results),
+            'results': results
+        })
+    except Exception as e:
+        print(f"模型预测失败: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f"模型预测失败: {str(e)}"
+        }), 500
+
+# MIX
+@app.route('/api/mix_confusion_matrix')
+def get_mix_confusion_matrix():
+    """获取混合模型混淆矩阵图片"""
+    try:
+        image_path = os.path.join('..', 'output', 'img', 'mix_confusion_matrix.png')
+        return send_file(image_path, mimetype='image/png')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
+@app.route('/api/mix_training_history')
+def get_mix_training_history():
+    """获取混合模型训练历史图片"""
+    try:
+        image_path = os.path.join('..', 'output', 'img', 'mix_training_history.png')
+        return send_file(image_path, mimetype='image/png')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
 
 @app.route('/api/feature_importances_image', methods=['GET'])
 def get_feature_importances_image():

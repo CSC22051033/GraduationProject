@@ -42,7 +42,7 @@
         </div>
       </div>
 
-      <!-- 第二行：混淆矩阵和阈值优化 -->
+      <!-- 第二行：混淆矩阵和模型信息 -->
       <div class="row">
         <div class="image-card half-width">
           <div class="image-header">
@@ -66,133 +66,32 @@
           </div>
         </div>
 
-        <div class="image-card half-width">
-          <div class="image-header">
-            <h3>阈值优化</h3>
-            <p class="image-description">展示不同阈值下的模型性能指标</p>
-          </div>
-          <div class="image-container">
-            <img 
-              :src="thresholdOptimizationUrl" 
-              alt="LSTM阈值优化" 
-              class="cnn-image"
-              @load="onThresholdOptimizationLoad"
-              @error="onThresholdOptimizationError"
-            />
-            <div v-if="thresholdOptimizationLoading" class="image-loading">
-              正在加载阈值优化图...
-            </div>
-            <div v-if="thresholdOptimizationError" class="image-error">
-              阈值优化图加载失败
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 模型信息 -->
-      <div class="row">
-        <div class="info-card">
+        <div class="info-card half-width">
           <h3>模型信息</h3>
-          <div class="info-content">
-            <!-- 第一行 -->
-            <div class="info-row">
-              <div class="info-item">
-                <span class="info-label">模型类型:</span>
-                <span class="info-value">循环神经网络 (LSTM)</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">批归一化:</span>
-                <span class="info-value">2 层</span>
-              </div>
+          <div class="info-list">
+            <div class="info-item">
+              <span class="info-label">模型类型:</span>
+              <span class="info-value">循环神经网络 (LSTM)</span>
             </div>
-            <!-- 第二行 -->
-            <div class="info-row">
-              <div class="info-item">
-                <span class="info-label">LSTM 层:</span>
-                <span class="info-value">2 层 (128 隐藏单元)</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">全连接层:</span>
-                <span class="info-value">2 层 (64, 1 神经元)</span>
-              </div>
+            <div class="info-item">
+              <span class="info-label">批归一化:</span>
+              <span class="info-value">2 层</span>
             </div>
-            <!-- 第三行 -->
-            <div class="info-row">
-              <div class="info-item">
-                <span class="info-label">输出层:</span>
-                <span class="info-value">1 神经元 (欺诈概率)</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">保存位置:</span>
-                <span class="info-value">output/models/rnn_model.pth</span>
-              </div>
+            <div class="info-item">
+              <span class="info-label">LSTM 层:</span>
+              <span class="info-value">2 层 (128 隐藏单元)</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 预测测试区域 -->
-      <div class="row">
-        <div class="prediction-card">
-          <h3>模型测试</h3>
-          <div class="prediction-controls">
-            <!-- 增加输入框 -->
-            <div class="input-group">
-              <label for="test-index">测试样本索引 (k):</label>
-              <input 
-                type="number" 
-                id="test-index"
-                v-model.number="testIndex"
-                min="0"
-                placeholder="输入测试样本索引"
-                class="index-input"
-              />
+            <div class="info-item">
+              <span class="info-label">全连接层:</span>
+              <span class="info-value">2 层 (64, 1 神经元)</span>
             </div>
-            
-            <button 
-              class="predict-btn"
-              @click="testModel"
-              :disabled="testing"
-            >
-              {{ testing ? '测试中...' : '运行模型测试' }}
-            </button>
-            
-            <div v-if="testResult" class="test-result">
-              <div class="result-header">
-                <h4>测试结果</h4>
-                <span class="sample-indicator">样本 #{{ testIndex }}</span>
-              </div>
-              <div class="result-content">
-                <div class="result-row">
-                  <div class="result-item">
-                    <span class="result-label">欺诈概率</span>
-                    <span class="result-value">{{ (testResult.fraud_probability * 100).toFixed(1) }}%</span>
-                  </div>
-                  <div class="result-item">
-                    <span class="result-label">预测结果</span>
-                    <span :class="['result-prediction', 
-                                testResult.prediction === 'fraud' ? 'fraud' : 'non-fraud']">
-                      {{ testResult.prediction === 'fraud' ? '欺诈' : '非欺诈' }}
-                    </span>
-                  </div>
-                </div>
-                <div class="result-row">
-                  <div class="result-item">
-                    <span class="result-label">真实标签</span>
-                    <span :class="['result-prediction', 
-                                testResult.true_value === 1 ? 'fraud' : 'non-fraud']">
-                      {{ testResult.true_value === 1 ? '欺诈' : '非欺诈' }}
-                    </span>
-                  </div>
-                  <div class="result-item">
-                    <span class="result-label">是否匹配</span>
-                    <span :class="['result-match', 
-                                testResult.prediction === (testResult.true_value === 1 ? 'fraud' : 'non-fraud') ? 'match' : 'mismatch']">
-                      {{ testResult.prediction === (testResult.true_value === 1 ? 'fraud' : 'non-fraud') ? '✓ 匹配' : '✗ 不匹配' }}
-                    </span>
-                  </div>
-                </div>
-              </div>
+            <div class="info-item">
+              <span class="info-label">输出层:</span>
+              <span class="info-value">1 神经元 (欺诈概率)</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">保存位置:</span>
+              <span class="info-value">output/models/rnn_model.pth</span>
             </div>
           </div>
         </div>
@@ -209,22 +108,16 @@ export default {
     return {
       loading: true,
       error: null,
-      testing: false,
-      testResult: null,
-      testIndex: 0,  // 默认测试索引
       
       // 图片URL
       confusionMatrixUrl: 'http://localhost:5000/api/rnn_confusion_matrix',
-      thresholdOptimizationUrl: 'http://localhost:5000/api/rnn_threshold_optimization',
       trainingHistoryUrl: 'http://localhost:5000/api/rnn_training_history',
       
       // 图片加载状态
       confusionMatrixLoading: true,
-      thresholdOptimizationLoading: true,
       trainingHistoryLoading: true,
       
       confusionMatrixError: false,
-      thresholdOptimizationError: false,
       trainingHistoryError: false
     };
   },
@@ -244,47 +137,15 @@ export default {
         }, 500);
         
       } catch (error) {
-        console.error('加载CNN结果失败:', error);
-        this.error = '加载CNN模型结果失败，请稍后重试';
+        console.error('加载RNN结果失败:', error);
+        this.error = '加载RNN模型结果失败，请稍后重试';
         this.loading = false;
-      }
-    },
-    
-    async testModel() {
-      this.testing = true;
-      try {
-        // 调用后端预测接口，传递测试索引
-        const response = await fetch('http://localhost:5000/api/rnn_predict', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            k: this.testIndex  // 传递测试样本索引
-          })
-        });
-        
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-          this.testResult = data.prediction;
-        } else {
-          throw new Error(data.error || '预测失败');
-        }
-      } catch (error) {
-        console.error('模型测试失败:', error);
-        alert(`模型测试失败: ${error.message}`);
-      } finally {
-        this.testing = false;
       }
     },
     
     // 图片加载成功处理
     onConfusionMatrixLoad() {
       this.confusionMatrixLoading = false;
-    },
-    onThresholdOptimizationLoad() {
-      this.thresholdOptimizationLoading = false;
     },
     onTrainingHistoryLoad() {
       this.trainingHistoryLoading = false;
@@ -295,11 +156,6 @@ export default {
       this.confusionMatrixLoading = false;
       this.confusionMatrixError = true;
       console.error('混淆矩阵图片加载失败');
-    },
-    onThresholdOptimizationError() {
-      this.thresholdOptimizationLoading = false;
-      this.thresholdOptimizationError = true;
-      console.error('阈值优化图片加载失败');
     },
     onTrainingHistoryError() {
       this.trainingHistoryLoading = false;
@@ -435,10 +291,7 @@ export default {
   flex: 1;
 }
 
-.info-content {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 15px;
+.info-list {
   margin-top: 15px;
 }
 
@@ -446,298 +299,31 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  padding: 10px 0;
   border-bottom: 1px solid #f0f0f0;
 }
 
+.info-item:last-child {
+  border-bottom: none;
+}
+
 .info-label {
-  font-weight: 500;
+  font-weight: 600;
   color: #555;
+  min-width: 120px;
+  font-size: 14px;
 }
 
 .info-value {
   color: #333;
   font-family: 'Courier New', monospace;
-  background: #f5f5f5;
-  padding: 2px 8px;
-  border-radius: 3px;
-  font-size: 14px;
-}
-
-/* 预测卡片 */
-.prediction-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 20px;
-  flex: 1;
-}
-
-.prediction-controls {
-  margin-top: 20px;
-}
-
-.predict-btn {
-  background: #4CAF50;
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 4px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-
-.predict-btn:hover:not(:disabled) {
-  background: #45a049;
-}
-
-.predict-btn:disabled {
-  background: #cccccc;
-  cursor: not-allowed;
-}
-
-.test-result {
-  margin-top: 20px;
-  padding: 15px;
   background: #f8f9fa;
+  padding: 4px 10px;
   border-radius: 4px;
-  border-left: 4px solid #4CAF50;
-}
-
-.test-result h4 {
-  margin: 0 0 10px 0;
-  color: #333;
-}
-
-.result-content {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 15px;
-}
-
-.result-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.result-label {
   font-size: 14px;
-  color: #666;
-}
-
-.result-value {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-}
-
-.result-prediction {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-weight: bold;
-  font-size: 14px;
-  display: inline-block;
-}
-
-.result-prediction.fraud {
-  background: #ffebee;
-  color: #c62828;
-}
-
-.result-prediction.non-fraud {
-  background: #e8f5e8;
-  color: #2e7d32;
-}
-
-/* 新增样式 */
-/* 输入框样式优化 */
-.input-group {
-  margin-bottom: 20px;
-}
-
-.input-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  color: #333;
-  font-size: 14px;
-}
-
-.index-input {
-  width: 97.5%;
-  padding: 10px 12px;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
-  font-size: 15px;
-  transition: all 0.3s ease;
-  background-color: #fafafa;
-}
-
-.index-input:focus {
-  outline: none;
-  border-color: #007bff;
-  background-color: white;
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
-}
-
-.index-input:hover {
-  border-color: #b3b3b3;
-}
-
-/* 按钮样式优化 */
-.predict-btn {
-  width: 100%;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 16px;
-  transition: all 0.3s ease;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
-}
-
-.predict-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
-  background: linear-gradient(135deg, #0069d9 0%, #004a99 100%);
-}
-
-.predict-btn:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.predict-btn:disabled {
-  background: #cccccc;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-/* 结果区域样式优化 */
-.test-result {
-  margin-top: 20px;
-  padding: 20px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 10px;
-  border: 1px solid #dee2e6;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #e9ecef;
-}
-
-.result-header h4 {
-  margin: 0;
-  color: #333;
-  font-weight: 700;
-}
-
-.sample-indicator {
-  background-color: #6c757d;
-  color: white;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-/* 结果内容样式优化 */
-.result-row {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 15px;
-}
-
-.result-row:last-child {
-  margin-bottom: 0;
-}
-
-.result-item {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.result-label {
-  font-size: 13px;
-  color: #666;
-  font-weight: 500;
-}
-
-.result-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: #333;
-}
-
-/* 预测结果标签样式优化 */
-.result-prediction {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 14px;
-  text-align: center;
-  min-width: 80px;
-  transition: all 0.3s ease;
-}
-
-.result-prediction.fraud {
-  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-  color: white;
-  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
-}
-
-.result-prediction.non-fraud {
-  background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
-  color: white;
-  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
-}
-
-/* 匹配结果样式优化 */
-.result-match {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 14px;
-  text-align: center;
-  min-width: 80px;
-  transition: all 0.3s ease;
-}
-
-.result-match.match {
-  background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
-  color: white;
-  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
-}
-
-.result-match.mismatch {
-  background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
-  color: #333;
-  box-shadow: 0 2px 4px rgba(255, 193, 7, 0.2);
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .result-row {
-    flex-direction: column;
-    gap: 10px;
-  }
-  
-  .result-item {
-    width: 100%;
-  }
+  text-align: right;
+  border: 1px solid #e9ecef;
 }
 
 /* 响应式设计 */
@@ -746,12 +332,13 @@ export default {
     flex: 0 0 100%;
   }
   
-  .info-content {
-    grid-template-columns: 1fr;
+  .info-label {
+    min-width: 100px;
+    font-size: 13px;
   }
   
-  .result-content {
-    grid-template-columns: 1fr;
+  .info-value {
+    font-size: 13px;
   }
 }
 </style>
