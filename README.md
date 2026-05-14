@@ -9,6 +9,7 @@ GraduationProject
 │  ├─ DeepLearning_CNN.py
 │  ├─ DeepLearning_Mixed.py
 │  ├─ DeepLearning_RNN.py
+│  ├─ output
 │  ├─ re
 │  │  ├─ best_transformer.pt
 │  │  ├─ DeepLearning_Transformer.py
@@ -17,6 +18,12 @@ GraduationProject
 │  │  ├─ transformer_threshold_optimization.png
 │  │  └─ transformer_training_history.png
 │  └─ __pycache__
+│     ├─ app.cpython-311.pyc
+│     ├─ carClaims.cpython-311.pyc
+│     ├─ claims_visualizer.cpython-311.pyc
+│     ├─ DeepLearning_CNN.cpython-311.pyc
+│     ├─ DeepLearning_Mixed.cpython-311.pyc
+│     └─ DeepLearning_RNN.cpython-311.pyc
 ├─ carclaims.csv
 ├─ frontend
 │  ├─ babel.config.js
@@ -29,7 +36,6 @@ GraduationProject
 │  ├─ README.md
 │  ├─ src
 │  │  ├─ App.vue
-│  │  ├─ assets
 │  │  ├─ components
 │  │  │  ├─ SideBar.vue
 │  │  │  ├─ SideBarV.vue
@@ -46,31 +52,35 @@ GraduationProject
 │  │     │  └─ Intro.vue
 │  │     ├─ Dataset.vue
 │  │     ├─ Home.vue
+│  │     ├─ PFraud.vue
 │  │     ├─ visual
 │  │     │  ├─ CNN.vue
+│  │     │  ├─ MIX.vue
 │  │     │  └─ RNN.vue
 │  │     └─ Visual.vue
 │  └─ vue.config.js
 └─ output
-   ├─ feature_lists
    ├─ img
    │  ├─ class_distribution_smote_under.png
    │  ├─ cnn_confusion_matrix.png
-   │  ├─ cnn_threshold_optimization.png
    │  ├─ cnn_training_history.png
+   │  ├─ cnn_training_history_metrics.csv
    │  ├─ feature_importances.png
    │  ├─ mix_confusion_matrix.png
-   │  ├─ mix_threshold_optimization.png
    │  ├─ mix_training_history.png
+   │  ├─ mix_training_history_metrics.csv
    │  ├─ rnn_confusion_matrix.png
-   │  ├─ rnn_threshold_optimization.png
-   │  └─ rnn_training_history.png
-   └─ model
-      ├─ best_cnn.pt
-      ├─ best_lstm.pt
-      ├─ best_mix.pt
-      ├─ cnn_trained.pth
-      ├─ mix_model.pth
-      └─ rnn_model.pth
+   │  ├─ rnn_training_history.png
+   │  └─ rnn_training_history_metrics.csv
+   ├─ model
+   │  ├─ best_cnn.pt
+   │  ├─ best_lstm.pt
+   │  ├─ best_mix.pt
+   │  ├─ cnn_trained.pth
+   │  ├─ mix_model.pth
+   │  └─ rnn_model.pth
+   ├─ res
+   ├─ X_test.csv
+   └─ y_test.csv
 
 ```
